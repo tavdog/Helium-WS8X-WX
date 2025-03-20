@@ -15,7 +15,7 @@ and the code is based on https://github.com/helium/longfi-platformio/tree/master
 The only hardware required is:
 * the [WisBlock Starter Kit](https://store.rakwireless.com/products/wisblock-starter-kit) containing  the base board with the core module installed.
 * WS85 Weather station from Ecowitt (follow this hackaday article for how to modify the station to enable serial output [WS85 Mod](https://hackaday.io/project/196990-meshtastic-ultrasonic-anemometer-wx-station) )
-* A Harbor Breeze solar led lamp https://hackaday.io/project/194509-harbor-breeze-meshtastic-hack
+* A Harbor Breeze solar led lamp https://hackaday.io/project/194509-harbor-breeze-mesh-node-hack
 
 #### Antenna Type/location
 The WisBlock starter kit comes with two antenna types, 
