@@ -1,0 +1,26 @@
+========== WS85 Ver:1.0.7 ===========
+>> g_RrFreqSel = 868M
+>> Device_ID  = 0x001234
+-------------------------------------
+WindDir      = 45
+WindSpeed    = 3.0
+WindGust     = 4.0
+GXTS04Temp   = 24.4
+
+UltSignalRssi  = 0
+UltStatus      = 0
+SwitchCnt      = 0
+RainIntSum     = 333
+Rain           = 23.4
+WaveCnt[CH1]   = 0
+WaveCnt[CH2]   = 0
+WaveRain       = 0
+ToaltWave[CH1] = 0
+ToaltWave[CH2] = 0
+ResAdcCH1      = 4095
+ResAdcSloCH1   = 0.0
+ResAdcCH2      = 4095
+ResAdcSloCH2   = 0.0
+CapVoltage     = 5.80V
+BatVoltage     = 3.26V
+=====================================
