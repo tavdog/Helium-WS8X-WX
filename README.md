@@ -1,8 +1,8 @@
 
-# Helium Basic Example
+# Helium WS85 WX
 
 Here you will find a very basic example of a WisBlock/Helium embedded project that uses PlatformIO as the development IDE rather than the Arduino IDE.
-This version will join the Helium network and periodically send a "Hello" to the Helium network.
+This version will join the Helium network and periodically send WX data from a WS85 serial output to the Helium network.
 
 ## Support Library Version Incompatibility
 Recent API changes to the runtime support library, SX126x-Arduino, have resulted in library version incompatibility between version 1.3x and version 2.x. The two major changes at the device application level are:
@@ -36,6 +36,7 @@ The device application's main.cpp file contains the following conditional compil
 The only hardware required is:
 * the [WisBlock Starter Kit](https://store.rakwireless.com/products/wisblock-starter-kit) containing  the base board with the core module installed.
 * one USB 2.0 A-Male to Micro B interface cable.
+* WS85 Weather station from Ecowitt follow this hackaday article for how to modify the station to enable serial output [WS85 Mod](https://hackaday.io/project/196990-meshtastic-ultrasonic-anemometer-wx-station)
 
 #### Antenna Type/location
 The WisBlock starter kit comes with two antenna types, 
