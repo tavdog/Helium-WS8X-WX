@@ -14,12 +14,14 @@ and the code is based on https://github.com/helium/longfi-platformio/tree/master
 ### Hardware
 The only hardware required is:
 * the [WisBlock Starter Kit](https://store.rakwireless.com/products/wisblock-starter-kit) containing  the base board with the core module installed.
-* one USB 2.0 A-Male to Micro B interface cable.
 * WS85 Weather station from Ecowitt (follow this hackaday article for how to modify the station to enable serial output [WS85 Mod](https://hackaday.io/project/196990-meshtastic-ultrasonic-anemometer-wx-station) )
+* A Harbor Breeze solar led lamp https://hackaday.io/project/194509-harbor-breeze-meshtastic-hack
 
 #### Antenna Type/location
 The WisBlock starter kit comes with two antenna types, 
 * the one that resembles an "I" is the LoRa antenna, this one connects to the connector on the core moduke marked LoRa, which is below the large K in the RAK logo.
 * the one that resembles a "T" is the BLE antenna, this one connects to the connector on the core module marked BLE
+
+<img width="541" alt="Screenshot 2025-03-19 at 4 50 39 PM" src="https://github.com/user-attachments/assets/bd7be7ab-d512-480e-9969-85c8ac52fb5f" />
 
 
