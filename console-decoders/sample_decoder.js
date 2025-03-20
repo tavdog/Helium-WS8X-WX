@@ -1,8 +1,5 @@
-// Helium console decoder
-// This is a very simple decoder for testing only. modify to suit your
-// payload  needs
+function Decoder(bytes, port, uplink_info) {
 
-function Decoder(bytes, port) {
   // Ensure the payload length matches the expected size
   if (bytes.length !== 16) {
     throw new Error("Invalid payload size. Expected 16 bytes.");
@@ -38,14 +35,14 @@ function Decoder(bytes, port) {
   offset += 2;
 
   // Return the decoded values as a JSON object
-  return {
-    dirAvg: dirAvg,
+  return JSON.stringify({
+    dir: dirAvg,
     velAvg: velAvg,
     gust: gust,
     lull: lull,
-    batVoltageF: batVoltageF,
-    capVoltageF: capVoltageF,
-    temperatureF: temperatureF,
-    rain: rain
-  };
+    batV: batVoltageF,
+    capV: capVoltageF,
+    tempC: temperatureF,
+    rainmm: rain
+  });
 }
