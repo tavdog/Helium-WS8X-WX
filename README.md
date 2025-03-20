@@ -1,42 +1,21 @@
 
 # Helium WS85 WX
 
-Here you will find a very basic example of a WisBlock/Helium embedded project that uses PlatformIO as the development IDE rather than the Arduino IDE.
-This version will join the Helium network and periodically send WX data from a WS85 serial output to the Helium network.
+<img width="834" alt="Screenshot 2025-03-19 at 4 53 52 PM" src="https://github.com/user-attachments/assets/ae234304-c6d3-4232-9f90-df9a4d58c139" />
 
-## Support Library Version Incompatibility
-Recent API changes to the runtime support library, SX126x-Arduino, have resulted in library version incompatibility between version 1.3x and version 2.x. The two major changes at the device application level are:
-* The lmh_init() API requires 2 more parameters
-* the device application is no longer required to call Radio.IrqProcess() within it's main processing loop.
+## Overview  
+This repository contains a **basic example** of a **WisBlock/Helium** embedded project using **PlatformIO** as the development environment instead of the Arduino IDE.  
 
-The complete details of the version change can be found [here](https://github.com/beegee-tokyo/SX126x-Arduino/blob/master/README_V2.md).
+This project joins the **Helium network** and periodically transmits **weather (WX) data** from a **WS85 serial output** to the **Helium network**.  
 
-The sample within this directory will support both version 1.3.x and version 2.x of the SX126x-Arduino. The platformio.ini contains the following snippet:
-```
-;; comment out the following if using Version 1.3.x of
-;; the SX126x-Arduino library
-lib_deps = beegee-tokyo/SX126x-Arduino   ; version 2
-
-;; Uncomment the following 2 lines if using Version 1.3.x of
-;; the SX126x-Arduino library
-;lib_deps = beegee-tokyo/SX126x-Arduino@^1.2.1  ; version 1.3.x
-;build_flags = -DREGION_US915 -DSX126x_Arduino_Ver1  ; version 1.3.x
-```
-
-The above is configured to support compiling against version 2.x of the SX126x-Arduino library. 
-
-Based on the value of lib_deps, PlatformIO will download the appropriate library version into the project's .pio/libdeps/wiscore_rak4631 subdirectory. This can be verified by inspecting the library.properties file that is contained within the downloaded library.
-
-The device application's main.cpp file contains the following conditional compile directive with determines which version of API to call.
-```
-#ifdef SX126x_Arduino_Ver1
-```
+The build setup is based on https://docs.helium.com/network-iot/devices/development/rakwireless/wisblock-4631/platformio
+and the code is based on https://github.com/helium/longfi-platformio/tree/master/RAKWireless-WisBlock/examples/LoRaWan_OTAA
 
 ### Hardware
 The only hardware required is:
 * the [WisBlock Starter Kit](https://store.rakwireless.com/products/wisblock-starter-kit) containing  the base board with the core module installed.
 * one USB 2.0 A-Male to Micro B interface cable.
-* WS85 Weather station from Ecowitt follow this hackaday article for how to modify the station to enable serial output [WS85 Mod](https://hackaday.io/project/196990-meshtastic-ultrasonic-anemometer-wx-station)
+* WS85 Weather station from Ecowitt (follow this hackaday article for how to modify the station to enable serial output [WS85 Mod](https://hackaday.io/project/196990-meshtastic-ultrasonic-anemometer-wx-station) )
 
 #### Antenna Type/location
 The WisBlock starter kit comes with two antenna types, 
