@@ -79,8 +79,14 @@ static uint32_t count = 0;
 static uint32_t count_fail = 0;
 
 // Define constants
-// #define SERIAL_BUFFER_SIZE 512
-#define SEND_INTERVAL 60000
+//   _____ _   _ _______ ______ _______      __     _      
+//  |_   _| \ | |__   __|  ____|  __ \ \    / /\   | |     
+//    | | |  \| |  | |  | |__  | |__) \ \  / /  \  | |     
+//    | | | . ` |  | |  |  __| |  _  / \ \/ / /\ \ | |     
+//   _| |_| |\  |  | |  | |____| | \ \  \  / ____ \| |____ 
+//  |_____|_| \_|  |_|  |______|_|  \_\  \/_/    \_\______|
+
+#define SEND_INTERVAL 60000 // ms
 
 // Variables for wind data
 static double dir_sum_sin = 0;
