@@ -86,7 +86,7 @@ static uint32_t count_fail = 0;
 //   _| |_| |\  |  | |  | |____| | \ \  \  / ____ \| |____ 
 //  |_____|_| \_|  |_|  |______|_|  \_\  \/_/    \_\______|
 
-#define SEND_INTERVAL 60000 // ms
+#define SEND_INTERVAL 5 // minutes 
 
 // Variables for wind data
 static double dir_sum_sin = 0;
@@ -106,7 +106,7 @@ static int rainSum = 0;
 
 // Timer for sending data
 unsigned long lastSendTime = 0;
-
+unsigned long send_interval_ms = SEND_INTERVAL * 60000;
 void setup()
 {
 	pinMode(LED_BUILTIN, OUTPUT);
@@ -192,6 +192,7 @@ void setup()
 	Serial.println("Starting Join");
 	lmh_join();
 	Serial.println("Return from join");
+	Serial.printf("Send interval is %lu minutes\n", send_interval_ms / 60000);
 }
 
 void loop()
@@ -292,7 +293,7 @@ void loop()
     }
 
     // Check if it's time to send data
-    if (millis() - lastSendTime >= SEND_INTERVAL)
+    if (millis() - lastSendTime >= send_interval_ms  )
     {
         lastSendTime = millis();
 
@@ -353,7 +354,7 @@ void loop()
 			int16_t intCapVoltageF = (int16_t)(roundedCapVoltageF * 100);  // Scale to 2 decimal places
 			int16_t intTemperatureF = (int16_t)(roundedTemperatureF * 10); // Scale to 1 decimal place
 			uint16_t intRain = (uint16_t)(roundedRain * 10);			   // Scale to 1 decimal place
-
+			uint16_t send_interval_minutes = send_interval_ms / 60000;
 			// Pack the integers into the buffer in a specific order
 			int offset = 0;
 			memcpy(&m_lora_app_data.buffer[offset], &intDirAvg, sizeof(int16_t));
@@ -371,6 +372,8 @@ void loop()
 			memcpy(&m_lora_app_data.buffer[offset], &intTemperatureF, sizeof(int16_t));
 			offset += sizeof(int16_t);
 			memcpy(&m_lora_app_data.buffer[offset], &intRain, sizeof(uint16_t));
+			offset += sizeof(uint16_t);
+			memcpy(&m_lora_app_data.buffer[offset], &send_interval_minutes, sizeof(uint16_t));
 			offset += sizeof(uint16_t);
 
 			// Print debug information
@@ -420,6 +423,14 @@ void loop()
         else
         {
             Serial.println("Not joined to the network. Cannot send data.");
+			delay(5000);
+			static int not_joined_error_count = 0 ;
+			not_joined_error_count++ ;
+			if (not_joined_error_count > 5) {
+				// reboot.
+				NVIC_SystemReset(); // Perform a system reset
+			}
+			return; // don't reset the counters just yet.
         }
 
 		// Reset counters
@@ -461,6 +472,22 @@ void lorawan_rx_handler(lmh_app_data_t *app_data)
 {
 	Serial.printf("LoRa Packet received on port %d, size:%d, rssi:%d, snr:%d, data:%s\n",
 				  app_data->port, app_data->buffsize, app_data->rssi, app_data->snr, app_data->buffer);
+	// Check if the buffer contains a valid integer for the send interval
+	if (app_data->buffsize > 0 && isdigit(app_data->buffer[0]))
+	{
+		int new_interval = atoi((const char *)app_data->buffer); // Convert buffer to integer
+		if (new_interval > 0)
+		{
+			Serial.printf("Setting send interval to %d minutes\n", new_interval);
+			send_interval_ms = new_interval * 60000; // Convert minutes to milliseconds
+		}
+	}
+	// Check if the buffer contains the "reboot" command
+	else if (String("reboot").equals(String((const char *)app_data->buffer)))
+	{
+		Serial.println("Got reboot command");
+		NVIC_SystemReset(); // Perform a system reset
+	}
 }
 
 void lorawan_confirm_class_handler(DeviceClass_t Class)
