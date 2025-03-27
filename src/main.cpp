@@ -104,6 +104,7 @@ static float temperatureF = 0;
 static float rain = 0;
 static int rainSum = 0;
 
+static bool initialSendDone = false;
 // Timer for sending data
 unsigned long lastSendTime = 0;
 unsigned long send_interval_ms = SEND_INTERVAL * 60000;
@@ -192,7 +193,9 @@ void setup()
 	Serial.println("Starting Join");
 	lmh_join();
 	Serial.println("Return from join");
-	Serial.printf("Send interval is %lu minutes\n", send_interval_ms / 60000);
+	send_interval_ms = 30000; // Start with 30 second interval
+	Serial.println("Initial send interval: 30 seconds");
+	Serial.println("Will revert to normal interval after first send");
 }
 
 void loop() {
@@ -272,9 +275,16 @@ void loop() {
     // Check if it's time to send data
     if (millis() - lastSendTime >= send_interval_ms  )
     {
-        lastSendTime = millis();
+		lastSendTime = millis();
 
-        // Calculate averages
+		// After first send, switch to normal interval
+		if (!initialSendDone)
+		{
+			send_interval_ms = SEND_INTERVAL * 60000;
+			initialSendDone = true;
+			Serial.printf("Switching to normal send interval: %lu minutes\n", send_interval_ms / 60000);
+		}
+		// Calculate averages
         float velAvg = (velCount > 0) ? velSum / velCount : 0;
         double avgSin = (dirCount > 0) ? dir_sum_sin / dirCount : 0;
         double avgCos = (dirCount > 0) ? dir_sum_cos / dirCount : 0;
