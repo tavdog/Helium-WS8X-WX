@@ -203,93 +203,67 @@ void loop()
     // Check if data is available on the serial port
     if (Serial2.available() > 0)
     {
-        // Read serial data into buffer
-        // serialPayloadSize = Serial2.readBytes(serialBytes, SERIAL_BUFFER_SIZE);
-		
-		String line = Serial2.readStringUntil('\n');
-		line.trim();
-		// if (serialPayloadSize > 0)
-		if (line.length() > 0)
+        String line = Serial2.readStringUntil('\n');
+        line.trim();
+        
+        if (line.length() > 0)
         {
+            // Find the '=' character
+            int index = line.indexOf('=');
+            if (index != -1)
+            {
+                // Split into key and value, removing whitespace
+                String key = line.substring(0, index);
+                String value = line.substring(index + 1);
+                key.trim();
+                value.trim();
 
-			// Parse the line
-			// Serial.println(line);
+                // Remove 'V' suffix from voltage readings if present
+                if (value.endsWith("V")) {
+                    value = value.substring(0, value.length() - 1);
+                }
 
-			if (line.startsWith("WindDir"))
-			{
-				int index = line.indexOf('=');
-				if (index != -1)
-				{
-					float windDir = line.substring(index + 1).toFloat();
-					double radians = windDir * M_PI / 180.0; // Convert to radians
-					dir_sum_sin += sin(radians);
-					dir_sum_cos += cos(radians);
-					dirCount++;
-				}
-			}
-			else if (line.startsWith("WindSpeed"))
-			{
-				int index = line.indexOf('=');
-				if (index != -1)
-				{
-					float windSpeed = line.substring(index + 1).toFloat();
-					velSum += windSpeed;
-					velCount++;
-					if (lull == -1 || windSpeed < lull)
-						lull = windSpeed;
-				}
-			}
-			else if (line.startsWith("WindGust"))
-			{
-				int index = line.indexOf('=');
-				if (index != -1)
-				{
-					float windGust = line.substring(index + 1).toFloat();
-					if (windGust > gust)
-						gust = windGust;
-				}
-			}
-			else if (line.startsWith("BatVoltage"))
-			{
-				int index = line.indexOf('=');
-				if (index != -1)
-				{
-					batVoltageF = line.substring(index + 1).toFloat();
-				}
-			}
-			else if (line.startsWith("CapVoltage"))
-			{
-				int index = line.indexOf('=');
-				if (index != -1)
-				{
-					capVoltageF = line.substring(index + 1).toFloat();
-				}
-			}
-			else if (line.startsWith("GXTS04Temp"))
-			{
-				int index = line.indexOf('=');
-				if (index != -1)
-				{
-					temperatureF = line.substring(index + 1).toFloat();
-				}
-			}
-			else if (line.startsWith("RainIntSum"))
-			{
-				int index = line.indexOf('=');
-				if (index != -1)
-				{
-					rainSum = line.substring(index + 1).toInt();
-				}
-			}
-			else if (line.startsWith("Rain") && !line.startsWith("WaveRain"))
-			{
-				int index = line.indexOf('=');
-				if (index != -1)
-				{
-					rain = line.substring(index + 1).toFloat();
-				}
-			}
-		}
+                // Now parse based on the key
+                if (key == "WindDir")
+                {
+                    float windDir = value.toFloat();
+                    double radians = windDir * M_PI / 180.0;
+                    dir_sum_sin += sin(radians);
+                    dir_sum_cos += cos(radians);
+                    dirCount++;
+                }
+                else if (key == "WindSpeed")
+                {
+                    float windSpeed = value.toFloat();
+                    velSum += windSpeed;
+                    velCount++;
+                    if (lull == -1 || windSpeed < lull)
+                        lull = windSpeed;
+                }
+                else if (key == "WindGust")
+                {
+                    float windGust = value.toFloat();
+                    if (windGust > gust)
+                        gust = windGust;
+                }
+                else if (key == "BatVoltage")
+                {
+                    batVoltageF = value.toFloat();
+                }
+                else if (key == "CapVoltage")
+                {
+                    capVoltageF = value.toFloat();
+                }
+                else if (key == "GXTS04Temp" || key == "Temperature")  // Handle both sensor types
+                {
+                    if (value != "--")  // Check for valid temperature
+                    {
+                        temperatureF = value.toFloat();
+                    }
+                }
+                // ... rest of your parsing code ...
+            }
+        }
     }
 
     // Check if it's time to send data
