@@ -195,14 +195,13 @@ void setup()
 	Serial.printf("Send interval is %lu minutes\n", send_interval_ms / 60000);
 }
 
-void loop()
-{
-    char serialBytes[SERIAL_BUFFER_SIZE] = {0};
-    int serialPayloadSize = 0;
+void loop() {
+    const int maxIterations = 100; // Maximum number of lines to read per loop
+    int iterationCount = 0;
 
     // Check if data is available on the serial port
-    if (Serial2.available() > 0)
-    {
+    while (Serial2.available() > 0 && iterationCount < maxIterations) {
+        iterationCount++;
         String line = Serial2.readStringUntil('\n');
         line.trim();
         
@@ -264,6 +263,10 @@ void loop()
                 // ... rest of your parsing code ...
             }
         }
+    }
+
+    if (iterationCount >= maxIterations) {
+        Serial.println("Maximum serial reading iterations reached");
     }
 
     // Check if it's time to send data
