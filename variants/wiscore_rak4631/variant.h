@@ -59,7 +59,19 @@ extern "C"
 	static const uint8_t WB_SPI_MISO = 29; // IO_SLOT
 	static const uint8_t WB_SPI_MOSI = 30; // IO_SLOT
 
-// Number of pins defined in PinDescription array
+// Battery
+// The battery sense is hooked to pin A0 (5)
+#define BATTERY_PIN A0
+/** Definition of milliVolt per LSB => 3.0V ADC range and 12-bit ADC resolution = 3000mV/4096 */
+#define VBAT_MV_PER_LSB (0.73242188F)
+/** Voltage divider value => 1.5M + 1M voltage divider on VBAT = (1.5M / (1M + 1.5M)) */
+#define VBAT_DIVIDER (0.4F)
+/** Compensation factor for the VBAT divider */
+#define VBAT_DIVIDER_COMP (1.73)
+/** Fixed calculation of milliVolt from compensation value */
+#define REAL_VBAT_MV_PER_LSB (VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB)
+
+	// Number of pins defined in PinDescription array
 #define PINS_COUNT (48)
 #define NUM_DIGITAL_PINS (48)
 #define NUM_ANALOG_INPUTS (6)

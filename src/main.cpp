@@ -54,10 +54,12 @@ static void lorawan_has_joined_handler(void);
 static void lorawan_rx_handler(lmh_app_data_t *app_data);
 static void lorawan_confirm_class_handler(DeviceClass_t Class);
 static void send_lora_frame(void);
+static uint8_t boardGetBatteryLevel(void);
+static void initReadVBAT(void);
 
 /**@brief Structure containing LoRaWan callback functions, needed for lmh_init()
 */
-static lmh_callback_t lora_callbacks = {BoardGetBatteryLevel, BoardGetUniqueId, BoardGetRandomSeed,
+static lmh_callback_t lora_callbacks = {boardGetBatteryLevel, BoardGetUniqueId, BoardGetRandomSeed,
 										lorawan_rx_handler, lorawan_has_joined_handler, lorawan_confirm_class_handler};
 
 //OTAA keys !!!! KEYS ARE MSB !!!!
@@ -108,6 +110,7 @@ static bool initialSendDone = false;
 // Timer for sending data
 unsigned long lastSendTime = 0;
 unsigned long send_interval_ms = SEND_INTERVAL * 60000;
+
 void setup()
 {
 	pinMode(LED_BUILTIN, OUTPUT);
@@ -196,6 +199,7 @@ void setup()
 	send_interval_ms = 30000; // Start with 30 second interval
 	Serial.println("Initial send interval: 30 seconds");
 	Serial.println("Will revert to normal interval after first send");
+	initReadVBAT();
 }
 
 void loop() {
@@ -341,7 +345,7 @@ void loop() {
 			int16_t intCapVoltageF = (int16_t)(roundedCapVoltageF * 100);  // Scale to 2 decimal places
 			int16_t intTemperatureF = (int16_t)(roundedTemperatureF * 10); // Scale to 1 decimal place
 			uint16_t intRain = (uint16_t)(roundedRain * 10);			   // Scale to 1 decimal place
-			uint16_t send_interval_minutes = send_interval_ms / 60000;
+			uint16_t deviceVoltage_mv = (uint16_t)(analogRead(BATTERY_PIN) * REAL_VBAT_MV_PER_LSB);
 			// Pack the integers into the buffer in a specific order
 			int offset = 0;
 			memcpy(&m_lora_app_data.buffer[offset], &intDirAvg, sizeof(int16_t));
@@ -360,7 +364,7 @@ void loop() {
 			offset += sizeof(int16_t);
 			memcpy(&m_lora_app_data.buffer[offset], &intRain, sizeof(uint16_t));
 			offset += sizeof(uint16_t);
-			memcpy(&m_lora_app_data.buffer[offset], &send_interval_minutes, sizeof(uint16_t));
+			memcpy(&m_lora_app_data.buffer[offset], &deviceVoltage_mv, sizeof(uint16_t));
 			offset += sizeof(uint16_t);
 
 			// Print debug information
@@ -434,6 +438,49 @@ void loop() {
 		rain = 0;		  // Reset rain
 		rainSum = 0;	  // Reset rain sum
 	}
+}
+void initReadVBAT(void)
+{
+	// Set the analog reference to 3.0V (default = 3.6V)
+	analogReference(AR_INTERNAL_3_0);
+
+	// Set the resolution to 12-bit (0..4095)
+	analogReadResolution(12); // Can be 8, 10, 12 or 14
+
+	// Let the ADC settle
+	delay(1);
+
+	// Get a single ADC sample and throw it away
+	boardGetBatteryLevel();
+}
+uint8_t boardGetBatteryLevel(void) {
+	float voltage = (analogRead(BATTERY_PIN) * REAL_VBAT_MV_PER_LSB) / 1000.0; // Convert to volts
+
+	// Define voltage range for battery level
+	const float MAX_VOLTAGE = 4.2; // Maximum LiPo voltage
+	const float MIN_VOLTAGE = 3.0; // Minimum LiPo voltage
+
+	if (voltage > MAX_VOLTAGE)
+	{
+		return 254; // Max level (254 as per LoRaWAN spec)
+	}
+	else if (voltage < MIN_VOLTAGE)
+	{
+		return 1; // Min level (1 as per LoRaWAN spec)
+	}
+
+	// Calculate percentage (1-254 range)
+	uint8_t level = 1 + ((voltage - MIN_VOLTAGE) / (MAX_VOLTAGE - MIN_VOLTAGE)) * 253;
+	return level;
+	// float raw;
+
+	// // Get the raw 12-bit, 0..3000mV ADC value
+	// raw = analogRead(BATTERY_PIN);
+
+	// // Convert the raw value to compensated mv, taking the resistor-
+	// // divider into account (providing the actual LIPO voltage)
+	// // ADC range is 0..3000mV and resolution is 12-bit (0..4095)
+	// return (uint8_t)(raw * REAL_VBAT_MV_PER_LSB *2.55);
 }
 
 /**@brief LoRa function for handling HasJoined event.
