@@ -212,8 +212,10 @@ void loop() {
         iterationCount++;
         String line = Serial1.readStringUntil('\n');
         line.trim();
-        
-        if (line.length() > 0)
+        #ifdef PRINT_WX_SERIAL
+		Serial.println(line);
+		#endif
+		if (line.length() > 0)
         {
             // Find the '=' character
             int index = line.indexOf('=');
