@@ -121,9 +121,10 @@ void setup()
      delay(5000);
 	// Initialize Serial for debug output
 	Serial.begin(115200);
+	Serial1.begin(115200);
 
-	Serial2.setPins(15, 16); // Set RX and TX pins
-	Serial2.begin(115200);
+	// Serial2.setPins(15, 16); // Set RX and TX pins
+	// Serial2.begin(115200);
 	// this next will cause the app to pause until
 	// you connect the virtual terminal to the comm port
 	// while (!Serial)
@@ -207,9 +208,9 @@ void loop() {
     int iterationCount = 0;
 
     // Check if data is available on the serial port
-    while (Serial2.available() > 0 && iterationCount < maxIterations) {
+    while (Serial1.available() > 0 && iterationCount < maxIterations) {
         iterationCount++;
-        String line = Serial2.readStringUntil('\n');
+        String line = Serial1.readStringUntil('\n');
         line.trim();
         
         if (line.length() > 0)
