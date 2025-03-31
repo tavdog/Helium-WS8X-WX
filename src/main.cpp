@@ -88,7 +88,7 @@ static uint32_t count_fail = 0;
 //   _| |_| |\  |  | |  | |____| | \ \  \  / ____ \| |____ 
 //  |_____|_| \_|  |_|  |______|_|  \_\  \/_/    \_\______|
 
-#define SEND_INTERVAL 5 // minutes 
+#define SEND_INTERVAL 1 // minutes 
 
 // Variables for wind data
 static double dir_sum_sin = 0;
@@ -105,7 +105,7 @@ static float capVoltageF = 0;
 static float temperatureF = 0;
 static float rain = 0;
 static int rainSum = 0;
-
+static int not_joined_error_count = 0;
 static bool initialSendDone = false;
 // Timer for sending data
 unsigned long lastSendTime = 0;
@@ -214,6 +214,8 @@ void loop() {
         line.trim();
         #ifdef PRINT_WX_SERIAL
 		Serial.println(line);
+		#else
+		Serial.print('.');
 		#endif
 		if (line.length() > 0)
         {
@@ -413,15 +415,17 @@ void loop() {
 			{
 				Serial.println("LoRa data send failed after maximum retries.");
 			}
+			not_joined_error_count = 0; // reset the error_count on success.
 		}
         else
         {
             Serial.println("Not joined to the network. Cannot send data.");
 			delay(5000);
-			static int not_joined_error_count = 0 ;
 			not_joined_error_count++ ;
+			Serial.printf("not_joined_error_count : %d", not_joined_error_count);
 			if (not_joined_error_count > 5) {
 				// reboot.
+				Serial.println("No Connection, Rebooting");
 				NVIC_SystemReset(); // Perform a system reset
 			}
 			return; // don't reset the counters just yet.

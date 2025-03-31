@@ -155,7 +155,7 @@ def on_message(client, userdata, msg):
                 "batV": data.get("batV", None),
                 "node_mv": data.get("node_mv", None),
             }
-            
+            print(wind_data)
             # Publish to Adafruit IO
             # publish_wind(device_name, wind_data)
             publish_node_mv(device_name, wind_data)
