@@ -1,30 +1,24 @@
-/**
- * @file LoRaWAN_OTAA.ino
- * @author rakwireless.com
- * @brief LoRaWan node example with OTAA registration
- * @version 0.1
- * @date 2020-08-21
- * 
- * @copyright Copyright (c) 2020
- * 
- * @note RAK5005-O GPIO mapping to RAK4631 GPIO ports
-   RAK5005-O <->  nRF52840
-   IO1       <->  P0.17 (Arduino GPIO number 17)
-   IO2       <->  P1.02 (Arduino GPIO number 34)
-   IO3       <->  P0.21 (Arduino GPIO number 21)
-   IO4       <->  P0.04 (Arduino GPIO number 4)
-   IO5       <->  P0.09 (Arduino GPIO number 9)
-   IO6       <->  P0.10 (Arduino GPIO number 10)
-   SW1       <->  P0.01 (Arduino GPIO number 1)
-   A0        <->  P0.04/AIN2 (Arduino Analog A2
-   A1        <->  P0.31/AIN7 (Arduino Analog A7
-   SPI_CS    <->  P0.26 (Arduino GPIO number 26) 
- */
 #include <Arduino.h>
-#include <LoRaWan-RAK4630.h> //http://librarymanager/All#SX126x
+#include <LoRaWan-RAK4630.h>
 #include <SPI.h>
 #include <math.h>
 #include "keys.h"
+
+#ifdef NRF52_SERIES
+#include <bluefruit.h>
+
+// BLE service declarations
+BLEDfu bledfu;
+BLEUart bleuart;
+bool bleUARTisConnected = false;
+
+// Function declarations
+void startAdv(void);
+void connect_callback(uint16_t conn_handle);
+void disconnect_callback(uint16_t conn_handle, uint8_t reason);
+void initBLE(void);
+void bleuart_rx_callback(uint16_t conn_handle); // Corrected signature
+#endif
 
 // RAK4630 supply two LED
 #ifndef LED_BUILTIN
@@ -36,14 +30,17 @@
 #endif
 
 bool doOTAA = true;
-#define SCHED_MAX_EVENT_DATA_SIZE APP_TIMER_SCHED_EVENT_DATA_SIZE /**< Maximum size of scheduler events. */
-#define SCHED_QUEUE_SIZE 60										  /**< Maximum number of events in the scheduler queue. */
-#define LORAWAN_DATERATE DR_1									  /*LoRaMac datarates definition, from DR_0 to DR_5*/
-#define LORAWAN_TX_POWER TX_POWER_5								  /*LoRaMac tx power definition, from TX_POWER_0 to TX_POWER_15*/
-#define JOINREQ_NBTRIALS 3										  /**< Number of trials for the join request. */
-DeviceClass_t gCurrentClass = CLASS_A;							  /* class definition*/
-lmh_confirm gCurrentConfirm = LMH_CONFIRMED_MSG;				  /* confirm/unconfirm packet definition*/
-uint8_t gAppPort = LORAWAN_APP_PORT;							  /* data port*/
+#define SCHED_MAX_EVENT_DATA_SIZE APP_TIMER_SCHED_EVENT_DATA_SIZE
+#define SCHED_QUEUE_SIZE 60
+#define LORAWAN_DATERATE DR_1
+#define LORAWAN_TX_POWER TX_POWER_5
+#define JOINREQ_NBTRIALS 3
+DeviceClass_t gCurrentClass = CLASS_A;
+lmh_confirm gCurrentConfirm = LMH_CONFIRMED_MSG;
+uint8_t gAppPort = LORAWAN_APP_PORT;
+
+#define DEVICE_NAME "WS85_Config"
+#define BLE_TIMEOUT 300000 // 5 minutes in milliseconds
 
 /**@brief Structure containing LoRaWan parameters, needed for lmh_init()
  */
@@ -58,22 +55,22 @@ static uint8_t boardGetBatteryLevel(void);
 static void initReadVBAT(void);
 
 /**@brief Structure containing LoRaWan callback functions, needed for lmh_init()
-*/
+ */
 static lmh_callback_t lora_callbacks = {boardGetBatteryLevel, BoardGetUniqueId, BoardGetRandomSeed,
 										lorawan_rx_handler, lorawan_has_joined_handler, lorawan_confirm_class_handler};
 
-//OTAA keys !!!! KEYS ARE MSB !!!!
-// NOTE : FILL IN THE THREE REQUIRED HELIUM NETWORK CREDENTIALS WITH YOUR VALUES AND DELETE THIS LINE
+// OTAA keys !!!! KEYS ARE MSB !!!!
+//  NOTE : FILL IN THE THREE REQUIRED HELIUM NETWORK CREDENTIALS WITH YOUR VALUES AND DELETE THIS LINE
 
 uint8_t nodeDeviceEUI[8] = NODE_DEVICE_EUI;
 uint8_t nodeAppEUI[8] = NODE_APP_EUI;
 uint8_t nodeAppKey[16] = NODE_APP_KEY;
 
 // Private defination
-#define LORAWAN_APP_DATA_BUFF_SIZE 64										  /**< buffer size of the data to be transmitted. */
-#define LORAWAN_APP_INTERVAL 300000 // not used											  /**< Defines for user timer, the application data transmission interval. 20s, value in [ms]. */
-static uint8_t m_lora_app_data_buffer[LORAWAN_APP_DATA_BUFF_SIZE];			  //< Lora user application data buffer.
-static lmh_app_data_t m_lora_app_data = {m_lora_app_data_buffer, 0, 0, 0, 0}; //< Lora user application data structure.
+#define LORAWAN_APP_DATA_BUFF_SIZE 64
+#define LORAWAN_APP_INTERVAL 300000 // not used
+static uint8_t m_lora_app_data_buffer[LORAWAN_APP_DATA_BUFF_SIZE];
+static lmh_app_data_t m_lora_app_data = {m_lora_app_data_buffer, 0, 0, 0, 0};
 
 TimerEvent_t appTimer;
 static uint32_t timers_init(void);
@@ -81,14 +78,14 @@ static uint32_t count = 0;
 static uint32_t count_fail = 0;
 
 // Define constants
-//   _____ _   _ _______ ______ _______      __     _      
-//  |_   _| \ | |__   __|  ____|  __ \ \    / /\   | |     
-//    | | |  \| |  | |  | |__  | |__) \ \  / /  \  | |     
-//    | | | . ` |  | |  |  __| |  _  / \ \/ / /\ \ | |     
-//   _| |_| |\  |  | |  | |____| | \ \  \  / ____ \| |____ 
+//   _____ _   _ _______ ______ _______      __     _
+//  |_   _| \ | |__   __|  ____|  __ \ \    / /\   | |
+//    | | |  \| |  | |  | |__  | |__) \ \  / /  \  | |
+//    | | | . ` |  | |  |  __| |  _  / \ \/ / /\ \ | |
+//   _| |_| |\  |  | |  | |____| | \ \  \  / ____ \| |____
 //  |_____|_| \_|  |_|  |______|_|  \_\  \/_/    \_\______|
 
-#define SEND_INTERVAL 1 // minutes 
+#define SEND_INTERVAL 1 // minutes
 
 // Variables for wind data
 static double dir_sum_sin = 0;
@@ -111,6 +108,11 @@ static bool initialSendDone = false;
 unsigned long lastSendTime = 0;
 unsigned long send_interval_ms = SEND_INTERVAL * 60000;
 
+#ifdef NRF52_SERIES
+unsigned long bleStartTime = 0;
+bool bleConfigMode = false;
+#endif
+
 void setup()
 {
 	pinMode(LED_BUILTIN, OUTPUT);
@@ -118,19 +120,11 @@ void setup()
 
 	// Initialize LoRa chip.
 	lora_rak4630_init();
-     delay(5000);
+	delay(5000);
 	// Initialize Serial for debug output
 	Serial.begin(115200);
 	Serial1.begin(115200);
 
-	// Serial2.setPins(15, 16); // Set RX and TX pins
-	// Serial2.begin(115200);
-	// this next will cause the app to pause until
-	// you connect the virtual terminal to the comm port
-	// while (!Serial)
-	// {
-	// 	delay(10);
-	// }
 	Serial.println("=====================================");
 	Serial.println("Welcome to RAK4630 LoRaWan!!!");
 	Serial.println("Type: OTAA");
@@ -165,9 +159,9 @@ void setup()
 	Serial.println("Built against SX126x-Arduino version 1.x");
 #else
 	Serial.println("Built against SX126x-Arduino version 2.x");
-#endif  // SX126x_Arduino_Ver1
+#endif // SX126x_Arduino_Ver1
 
-	//creat a user timer to send data to server period
+	// creat a user timer to send data to server period
 	uint32_t err_code;
 	err_code = timers_init();
 	if (err_code != 0)
@@ -201,89 +195,106 @@ void setup()
 	Serial.println("Initial send interval: 30 seconds");
 	Serial.println("Will revert to normal interval after first send");
 	initReadVBAT();
+
+#ifdef NRF52_SERIES
+	initBLE();
+#endif
 }
 
-void loop() {
-    const int maxIterations = 100; // Maximum number of lines to read per loop
-    int iterationCount = 0;
+void loop()
+{
+#ifdef NRF52_SERIES
+	// Add at start of loop()
+	if (bleConfigMode && (millis() - bleStartTime > BLE_TIMEOUT))
+	{
+		Serial.println("BLE config timeout, rebooting...");
+		NVIC_SystemReset();
+	}
+#endif
 
-    // Check if data is available on the serial port
-    while (Serial1.available() > 0 && iterationCount < maxIterations) {
-        iterationCount++;
-        String line = Serial1.readStringUntil('\n');
-        line.trim();
-        #ifdef PRINT_WX_SERIAL
+	const int maxIterations = 100; // Maximum number of lines to read per loop
+	int iterationCount = 0;
+
+	// Check if data is available on the serial port
+	while (Serial1.available() > 0 && iterationCount < maxIterations)
+	{
+		iterationCount++;
+		String line = Serial1.readStringUntil('\n');
+		line.trim();
+#ifdef PRINT_WX_SERIAL
 		Serial.println(line);
-		#else
+#else
 		Serial.print('.');
-		#endif
+#endif
 		if (line.length() > 0)
-        {
-            // Find the '=' character
-            int index = line.indexOf('=');
-            if (index != -1)
-            {
-                // Split into key and value, removing whitespace
-                String key = line.substring(0, index);
-                String value = line.substring(index + 1);
-                key.trim();
-                value.trim();
+		{
+			// Find the '=' character
+			int index = line.indexOf('=');
+			if (index != -1)
+			{
+				// Split into key and value, removing whitespace
+				String key = line.substring(0, index);
+				String value = line.substring(index + 1);
+				key.trim();
+				value.trim();
 
-                // Remove 'V' suffix from voltage readings if present
-                if (value.endsWith("V")) {
-                    value = value.substring(0, value.length() - 1);
-                }
+				// Remove 'V' suffix from voltage readings if present
+				if (value.endsWith("V"))
+				{
+					value = value.substring(0, value.length() - 1);
+				}
 
-                // Now parse based on the key
-                if (key == "WindDir")
-                {
-                    float windDir = value.toFloat();
-                    double radians = windDir * M_PI / 180.0;
-                    dir_sum_sin += sin(radians);
-                    dir_sum_cos += cos(radians);
-                    dirCount++;
-                }
-                else if (key == "WindSpeed")
-                {
-                    float windSpeed = value.toFloat();
-                    velSum += windSpeed;
-                    velCount++;
-                    if (lull == -1 || windSpeed < lull)
-                        lull = windSpeed;
-                }
-                else if (key == "WindGust")
-                {
-                    float windGust = value.toFloat();
-                    if (windGust > gust)
-                        gust = windGust;
-                }
-                else if (key == "BatVoltage")
-                {
-                    batVoltageF = value.toFloat();
-                }
-                else if (key == "CapVoltage")
-                {
-                    capVoltageF = value.toFloat();
-                }
-                else if (key == "GXTS04Temp" || key == "Temperature")  // Handle both sensor types
-                {
-                    if (value != "--")  // Check for valid temperature
-                    {
-                        temperatureF = value.toFloat();
-                    }
-                }
-                // ... rest of your parsing code ...
-            }
-        }
-    }
+				// Now parse based on the key
+				if (key == "WindDir")
+				{
+					float windDir = value.toFloat();
+					double radians = windDir * M_PI / 180.0;
+					dir_sum_sin += sin(radians);
+					dir_sum_cos += cos(radians);
+					dirCount++;
+				}
+				else if (key == "WindSpeed")
+				{
+					float windSpeed = value.toFloat();
+					velSum += windSpeed;
+					velCount++;
+					if (lull == -1 || windSpeed < lull)
+						lull = windSpeed;
+				}
+				else if (key == "WindGust")
+				{
+					float windGust = value.toFloat();
+					if (windGust > gust)
+						gust = windGust;
+				}
+				else if (key == "BatVoltage")
+				{
+					batVoltageF = value.toFloat();
+				}
+				else if (key == "CapVoltage")
+				{
+					capVoltageF = value.toFloat();
+				}
+				else if (key == "GXTS04Temp" || key == "Temperature") // Handle both sensor types
+				{
+					if (value != "--") // Check for valid temperature
+					{
+						temperatureF = value.toFloat();
+					}
+				}
+				// ... rest of your parsing code ...
+			}
+		}
+	}
 
-    if (iterationCount >= maxIterations) {
-        Serial.println("Maximum serial reading iterations reached");
-    }
+	if (iterationCount >= maxIterations)
+	{
+		Serial.println("Maximum serial reading iterations reached");
+	}
 
-    // Check if it's time to send data
-    if (millis() - lastSendTime >= send_interval_ms  )
-    {
+	// Check if it's time to send data
+	if (millis() - lastSendTime >= send_interval_ms)
+	{
 		lastSendTime = millis();
 
 		// After first send, switch to normal interval
@@ -294,24 +305,24 @@ void loop() {
 			Serial.printf("Switching to normal send interval: %lu minutes\n", send_interval_ms / 60000);
 		}
 		// Calculate averages
-        float velAvg = (velCount > 0) ? velSum / velCount : 0;
-        double avgSin = (dirCount > 0) ? dir_sum_sin / dirCount : 0;
-        double avgCos = (dirCount > 0) ? dir_sum_cos / dirCount : 0;
-        double avgRadians = atan2(avgSin, avgCos);
-        float dirAvg = avgRadians * 180.0 / M_PI; // Convert to degrees
-        if (dirAvg < 0)
-            dirAvg += 360.0;
+		float velAvg = (velCount > 0) ? velSum / velCount : 0;
+		double avgSin = (dirCount > 0) ? dir_sum_sin / dirCount : 0;
+		double avgCos = (dirCount > 0) ? dir_sum_cos / dirCount : 0;
+		double avgRadians = atan2(avgSin, avgCos);
+		float dirAvg = avgRadians * 180.0 / M_PI; // Convert to degrees
+		if (dirAvg < 0)
+			dirAvg += 360.0;
 
-        // Print data
-        Serial.printf("Wind Speed Avg: %.1f m/s, Wind Dir Avg: %d°, Gust: %.1f m/s, Lull: %.1f m/s\n",
-                      velAvg, (int)dirAvg, gust, lull);
-        Serial.printf("Battery Voltage: %.1f V, Capacitor Voltage: %.1f V, Temperature: %.1f °C\n",
-                      batVoltageF, capVoltageF, temperatureF);
-        Serial.printf("Rain: %.1f mm, Rain Sum: %d\n", rain, rainSum);
+		// Print data
+		Serial.printf("Wind Speed Avg: %.1f m/s, Wind Dir Avg: %d°, Gust: %.1f m/s, Lull: %.1f m/s\n",
+					  velAvg, (int)dirAvg, gust, lull);
+		Serial.printf("Battery Voltage: %.1f V, Capacitor Voltage: %.1f V, Temperature: %.1f °C\n",
+					  batVoltageF, capVoltageF, temperatureF);
+		Serial.printf("Rain: %.1f mm, Rain Sum: %d\n", rain, rainSum);
 
-        // Send data over LoRa
-        if (lmh_join_status_get() == LMH_SET)
-        {
+		// Send data over LoRa
+		if (lmh_join_status_get() == LMH_SET)
+		{
 
 			// Clear the buffer
 			memset(m_lora_app_data.buffer, 0, LORAWAN_APP_DATA_BUFF_SIZE);
@@ -384,13 +395,6 @@ void loop() {
 			m_lora_app_data.buffsize = offset;
 			m_lora_app_data.port = gAppPort;
 
-			// // String payload
-			// // Set the buffer size to the length of the formatted string
-			// m_lora_app_data.buffsize = strlen((char *)m_lora_app_data.buffer);
-			// m_lora_app_data.port = gAppPort;
-			// Serial.printf("Formatted payload: %s\n", (char *)m_lora_app_data.buffer);
-			// Serial.printf("message length : %d\n", m_lora_app_data.buffsize);
-
 			lmh_error_status error;
 			int retryCount = 0;
 			const int maxRetries = 5;
@@ -401,7 +405,7 @@ void loop() {
 				{
 					Serial.println("LoRa data sent successfully.");
 					send_error_count = 0; // reset the error_count on success.
-					break; // Exit the loop if the send is successful
+					break;				  // Exit the loop if the send is successful
 				}
 				else
 				{
@@ -411,7 +415,7 @@ void loop() {
 					delay(1000); // Optional: Add a delay between retries
 				}
 			} while (retryCount < maxRetries);
-			
+
 			if (retryCount == maxRetries)
 			{
 				Serial.println("LoRa data send failed after maximum retries.");
@@ -424,19 +428,20 @@ void loop() {
 				}
 			}
 		}
-        else
-        {
-            Serial.println("Not joined to the network. Cannot send data.");
+		else
+		{
+			Serial.println("Not joined to the network. Cannot send data.");
 			delay(5000);
-			send_error_count++ ;
+			send_error_count++;
 			Serial.printf("send_error_count : %d", send_error_count);
-			if (send_error_count > 5) {
+			if (send_error_count > 5)
+			{
 				// reboot.
 				Serial.println("No Connection, Rebooting");
 				NVIC_SystemReset(); // Perform a system reset
 			}
 			return; // don't reset the counters just yet.
-        }
+		}
 
 		// Reset counters
 		dir_sum_sin = dir_sum_cos = 0; // Reset wind direction sums
@@ -453,6 +458,7 @@ void loop() {
 		rainSum = 0;	  // Reset rain sum
 	}
 }
+
 void initReadVBAT(void)
 {
 	// Set the analog reference to 3.0V (default = 3.6V)
@@ -467,7 +473,9 @@ void initReadVBAT(void)
 	// Get a single ADC sample and throw it away
 	boardGetBatteryLevel();
 }
-uint8_t boardGetBatteryLevel(void) {
+
+uint8_t boardGetBatteryLevel(void)
+{
 	float voltage = (analogRead(BATTERY_PIN) * REAL_VBAT_MV_PER_LSB) / 1000.0; // Convert to volts
 
 	// Define voltage range for battery level
@@ -486,15 +494,6 @@ uint8_t boardGetBatteryLevel(void) {
 	// Calculate percentage (1-254 range)
 	uint8_t level = 1 + ((voltage - MIN_VOLTAGE) / (MAX_VOLTAGE - MIN_VOLTAGE)) * 253;
 	return level;
-	// float raw;
-
-	// // Get the raw 12-bit, 0..3000mV ADC value
-	// raw = analogRead(BATTERY_PIN);
-
-	// // Convert the raw value to compensated mv, taking the resistor-
-	// // divider into account (providing the actual LIPO voltage)
-	// // ADC range is 0..3000mV and resolution is 12-bit (0..4095)
-	// return (uint8_t)(raw * REAL_VBAT_MV_PER_LSB *2.55);
 }
 
 /**@brief LoRa function for handling HasJoined event.
@@ -552,7 +551,7 @@ void send_lora_frame(void)
 	return;
 	if (lmh_join_status_get() != LMH_SET)
 	{
-		//Not joined, try again later
+		// Not joined, try again later
 		return;
 	}
 
@@ -584,8 +583,6 @@ void tx_lora_periodic_handler(void)
 {
 	TimerSetValue(&appTimer, LORAWAN_APP_INTERVAL);
 	TimerStart(&appTimer);
-	// Serial.println("Sending frame now...");
-	// send_lora_frame();
 }
 
 /**@brief Function for the Timer initialization.
@@ -597,3 +594,129 @@ uint32_t timers_init(void)
 	TimerInit(&appTimer, tx_lora_periodic_handler);
 	return 0;
 }
+
+#ifdef NRF52_SERIES
+void initBLE(void)
+{
+	Bluefruit.begin();
+	Bluefruit.setTxPower(4);
+	Bluefruit.setName(DEVICE_NAME);
+	Bluefruit.autoConnLed(false);
+
+	Bluefruit.Periph.setConnectCallback(connect_callback);
+	Bluefruit.Periph.setDisconnectCallback(disconnect_callback);
+
+	// To be consistent OTA DFU should be added first if it exists
+	bledfu.begin();
+
+	// Configure and Start BLE Uart Service
+	bleuart.begin();
+	bleuart.setRxCallback(bleuart_rx_callback);
+
+	// Set up and start advertising
+	startAdv();
+}
+
+void startAdv(void)
+{
+	Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
+	Bluefruit.Advertising.addTxPower();
+	Bluefruit.Advertising.addName();
+
+	Bluefruit.Advertising.restartOnDisconnect(true);
+	Bluefruit.Advertising.setInterval(32, 244);
+	Bluefruit.Advertising.setFastTimeout(30);
+	Bluefruit.Advertising.start(0);
+}
+
+void connect_callback(uint16_t conn_handle)
+{
+	(void)conn_handle;
+	bleUARTisConnected = true;
+	bleStartTime = millis();
+	bleConfigMode = true;
+
+	// Optional: Print connection info
+	BLEConnection *connection = Bluefruit.Connection(conn_handle);
+	char central_name[32] = {0};
+	connection->getPeerName(central_name, sizeof(central_name));
+	Serial.print("Connected to ");
+	Serial.println(central_name);
+}
+
+void disconnect_callback(uint16_t conn_handle, uint8_t reason)
+{
+	(void)conn_handle;
+	(void)reason;
+	bleUARTisConnected = false;
+	bleConfigMode = false;
+	Serial.println("Disconnected");
+}
+
+void bleuart_rx_callback(uint16_t conn_handle)
+{
+	// Only process if we're connected
+	if (!bleUARTisConnected)
+		return;
+
+	char buf[64];
+	uint16_t len = bleuart.read(buf, sizeof(buf) - 1);
+	buf[len] = 0;
+	String cmd = String(buf);
+	cmd.trim();
+
+	if (cmd.startsWith("deveui="))
+	{
+		String eui = cmd.substring(7);
+		// Convert hex string to bytes
+		for (int i = 0; i < 8; i++)
+		{
+			nodeDeviceEUI[i] = strtoul(eui.substring(i * 2, i * 2 + 2).c_str(), NULL, 16);
+		}
+		bleuart.println("DevEUI updated");
+	}
+	else if (cmd.startsWith("appeui="))
+	{
+		String eui = cmd.substring(7);
+		for (int i = 0; i < 8; i++)
+		{
+			nodeAppEUI[i] = strtoul(eui.substring(i * 2, i * 2 + 2).c_str(), NULL, 16);
+		}
+		bleuart.println("AppEUI updated");
+	}
+	else if (cmd.startsWith("appkey="))
+	{
+		String key = cmd.substring(7);
+		for (int i = 0; i < 16; i++)
+		{
+			nodeAppKey[i] = strtoul(key.substring(i * 2, i * 2 + 2).c_str(), NULL, 16);
+		}
+		bleuart.println("AppKey updated");
+	}
+	else if (cmd.startsWith("interval="))
+	{
+		int newInterval = cmd.substring(9).toInt();
+		if (newInterval > 0)
+		{
+			send_interval_ms = newInterval * 60000;
+			bleuart.println("Interval updated");
+		}
+	}
+	else if (cmd == "reboot")
+	{
+		bleuart.println("Rebooting...");
+		delay(1000);
+		NVIC_SystemReset();
+	}
+	else if (cmd == "status")
+	{
+		char status[128];
+		snprintf(status, sizeof(status),
+				 "Interval: %lu min\nJoined: %s\nBattery: %.2fV",
+				 send_interval_ms / 60000,
+				 lmh_join_status_get() == LMH_SET ? "Yes" : "No",
+				 analogRead(BATTERY_PIN) * REAL_VBAT_MV_PER_LSB / 1000.0);
+		bleuart.println(status);
+	}
+}
+#endif
