@@ -105,7 +105,7 @@ static float capVoltageF = 0;
 static float temperatureF = 0;
 static float rain = 0;
 static int rainSum = 0;
-static int not_joined_error_count = 0;
+static int send_error_count = 0;
 static bool initialSendDone = false;
 // Timer for sending data
 unsigned long lastSendTime = 0;
@@ -400,6 +400,7 @@ void loop() {
 				if (error == LMH_SUCCESS)
 				{
 					Serial.println("LoRa data sent successfully.");
+					send_error_count = 0; // reset the error_count on success.
 					break; // Exit the loop if the send is successful
 				}
 				else
@@ -410,20 +411,26 @@ void loop() {
 					delay(1000); // Optional: Add a delay between retries
 				}
 			} while (retryCount < maxRetries);
-
+			
 			if (retryCount == maxRetries)
 			{
 				Serial.println("LoRa data send failed after maximum retries.");
+				send_error_count++; // reset the error_count on success.
+				if (send_error_count > 5)
+				{
+					// reboot.
+					Serial.println("5 Cycles of send error, Rebooting");
+					NVIC_SystemReset(); // Perform a system reset
+				}
 			}
-			not_joined_error_count = 0; // reset the error_count on success.
 		}
         else
         {
             Serial.println("Not joined to the network. Cannot send data.");
 			delay(5000);
-			not_joined_error_count++ ;
-			Serial.printf("not_joined_error_count : %d", not_joined_error_count);
-			if (not_joined_error_count > 5) {
+			send_error_count++ ;
+			Serial.printf("send_error_count : %d", send_error_count);
+			if (send_error_count > 5) {
 				// reboot.
 				Serial.println("No Connection, Rebooting");
 				NVIC_SystemReset(); // Perform a system reset
