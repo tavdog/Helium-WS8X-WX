@@ -8,16 +8,45 @@
 #include <bluefruit.h>
 
 // BLE service declarations
-BLEDfu bledfu;
-BLEUart bleuart;
+BLEDfu bledfu;  // OTA DFU service
+BLEDis bledis;  // Device Information Service
+BLEUart bleuart; // UART over BLE
+BLEBas blebas;  // Battery Service
+
 bool bleUARTisConnected = false;
 
 // Function declarations
 void startAdv(void);
 void connect_callback(uint16_t conn_handle);
 void disconnect_callback(uint16_t conn_handle, uint8_t reason);
-void initBLE(void);
-void bleuart_rx_callback(uint16_t conn_handle); // Corrected signature
+void bleuart_rx_callback(uint16_t conn_handle);
+
+void initBLE(void)
+{
+    Serial.println("Initializing BLE...");
+
+    Bluefruit.begin();
+    Bluefruit.setTxPower(4); // Set max power
+    Bluefruit.setName("WS85_Helium");
+    Bluefruit.autoConnLed(true);
+
+    // Configure peripheral connection with maximum bandwidth
+    Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
+
+    // Set connection callbacks
+    Bluefruit.Periph.setConnectCallback(connect_callback);
+    Bluefruit.Periph.setDisconnectCallback(disconnect_callback);
+
+    // To be consistent OTA DFU should be added first if it exists
+    bledfu.begin();
+
+    // Configure and Start BLE Uart Service
+    bleuart.begin();
+    bleuart.setRxCallback(bleuart_rx_callback);
+
+    // Set up and start advertising
+    startAdv();
+}
 #endif
 
 // RAK4630 supply two LED
@@ -85,7 +114,7 @@ static uint32_t count_fail = 0;
 //   _| |_| |\  |  | |  | |____| | \ \  \  / ____ \| |____
 //  |_____|_| \_|  |_|  |______|_|  \_\  \/_/    \_\______|
 
-#define SEND_INTERVAL 1 // minutes
+#define SEND_INTERVAL 5 // minutes
 
 // Variables for wind data
 static double dir_sum_sin = 0;
@@ -596,32 +625,12 @@ uint32_t timers_init(void)
 }
 
 #ifdef NRF52_SERIES
-void initBLE(void)
-{
-	Bluefruit.begin();
-	Bluefruit.setTxPower(4);
-	Bluefruit.setName(DEVICE_NAME);
-	Bluefruit.autoConnLed(false);
-
-	Bluefruit.Periph.setConnectCallback(connect_callback);
-	Bluefruit.Periph.setDisconnectCallback(disconnect_callback);
-
-	// To be consistent OTA DFU should be added first if it exists
-	bledfu.begin();
-
-	// Configure and Start BLE Uart Service
-	bleuart.begin();
-	bleuart.setRxCallback(bleuart_rx_callback);
-
-	// Set up and start advertising
-	startAdv();
-}
-
 void startAdv(void)
 {
 	Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
 	Bluefruit.Advertising.addTxPower();
 	Bluefruit.Advertising.addName();
+	Bluefruit.Advertising.addService(bleuart); // Add UART service to advertising
 
 	Bluefruit.Advertising.restartOnDisconnect(true);
 	Bluefruit.Advertising.setInterval(32, 244);
