@@ -8,10 +8,10 @@
 #include <bluefruit.h>
 
 // BLE service declarations
-BLEDfu bledfu;  // OTA DFU service
-BLEDis bledis;  // Device Information Service
+BLEDfu bledfu;	 // OTA DFU service
+BLEDis bledis;	 // Device Information Service
 BLEUart bleuart; // UART over BLE
-BLEBas blebas;  // Battery Service
+BLEBas blebas;	 // Battery Service
 
 bool bleUARTisConnected = false;
 
@@ -20,32 +20,32 @@ void startAdv(void);
 void connect_callback(uint16_t conn_handle);
 void disconnect_callback(uint16_t conn_handle, uint8_t reason);
 void bleuart_rx_callback(uint16_t conn_handle);
+void process_cmd(const String &cmd);
 
 void initBLE(void)
 {
-    Serial.println("Initializing BLE...");
-    // Configure peripheral connection with maximum bandwidth
-    Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
+	Serial.println("Initializing BLE...");
+	// Configure peripheral connection with maximum bandwidth
+	Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
 
 	// Set connection callbacks
-    Bluefruit.Periph.setConnectCallback(connect_callback);
-    Bluefruit.Periph.setDisconnectCallback(disconnect_callback);
+	Bluefruit.Periph.setConnectCallback(connect_callback);
+	Bluefruit.Periph.setDisconnectCallback(disconnect_callback);
 
-    Bluefruit.begin(1,0);
-    Bluefruit.setTxPower(0); // Set max power
-    Bluefruit.setName("WS85_Helium");
-    Bluefruit.autoConnLed(true);
+	Bluefruit.begin(1, 0);
+	Bluefruit.setTxPower(0); // Set max power
+	Bluefruit.setName("WS85_Helium");
+	Bluefruit.autoConnLed(true);
 
+	// To be consistent OTA DFU should be added first if it exists
+	bledfu.begin();
 
-    // To be consistent OTA DFU should be added first if it exists
-    bledfu.begin();
+	// Configure and Start BLE Uart Service
+	bleuart.setRxCallback(bleuart_rx_callback);
+	bleuart.begin();
 
-    // Configure and Start BLE Uart Service
-    bleuart.setRxCallback(bleuart_rx_callback);
-    bleuart.begin();
-
-    // Set up and start advertising
-    startAdv();
+	// Set up and start advertising
+	startAdv();
 }
 #endif
 
@@ -232,15 +232,25 @@ void setup()
 
 void loop()
 {
-	yield();
-#ifdef NRF52_SERIES
 	// Add at start of loop()
 	if (bleConfigMode && (millis() - bleStartTime > BLE_TIMEOUT))
 	{
 		Serial.println("BLE config timeout, rebooting...");
 		NVIC_SystemReset();
 	}
-#endif
+
+	// Process commands from Serial
+	if (Serial.available() > 0)
+	{
+		String cmd = Serial.readStringUntil('\n'); // Read command from Serial
+		cmd.trim();								   // Remove leading/trailing whitespace
+		if (cmd.length() > 0)
+		{
+			// Serial.print("Processing command from Serial: ");
+			Serial.println(cmd);
+			process_cmd(cmd); // Pass the command to process_cmd
+		}
+	}
 
 	const int maxIterations = 100; // Maximum number of lines to read per loop
 	int iterationCount = 0;
@@ -625,7 +635,6 @@ uint32_t timers_init(void)
 	return 0;
 }
 
-#ifdef NRF52_SERIES
 void startAdv(void)
 {
 	Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
@@ -676,6 +685,12 @@ void bleuart_rx_callback(uint16_t conn_handle)
 	cmd.trim();
 	// Debug output to verify received data
 	Serial.println(buf);
+	process_cmd(cmd);
+}
+
+// Function to process BLE commands
+void process_cmd(const String &cmd)
+{
 	if (cmd.startsWith("deveui=") || cmd.startsWith("Deveui="))
 	{
 		String eui = cmd.substring(7);
@@ -684,8 +699,8 @@ void bleuart_rx_callback(uint16_t conn_handle)
 		{
 			nodeDeviceEUI[i] = strtoul(eui.substring(i * 2, i * 2 + 2).c_str(), NULL, 16);
 		}
-		
 		bleuart.println("DevEUI updated");
+		Serial.println("DevEUI updated");
 	}
 	else if (cmd.startsWith("appeui="))
 	{
@@ -695,6 +710,7 @@ void bleuart_rx_callback(uint16_t conn_handle)
 			nodeAppEUI[i] = strtoul(eui.substring(i * 2, i * 2 + 2).c_str(), NULL, 16);
 		}
 		bleuart.println("AppEUI updated");
+		Serial.println("AppEUI updated");
 	}
 	else if (cmd.startsWith("appkey="))
 	{
@@ -704,6 +720,7 @@ void bleuart_rx_callback(uint16_t conn_handle)
 			nodeAppKey[i] = strtoul(key.substring(i * 2, i * 2 + 2).c_str(), NULL, 16);
 		}
 		bleuart.println("AppKey updated");
+		Serial.println("AppKey updated");
 	}
 	else if (cmd.startsWith("interval="))
 	{
@@ -712,11 +729,13 @@ void bleuart_rx_callback(uint16_t conn_handle)
 		{
 			send_interval_ms = newInterval * 60000;
 			bleuart.println("Interval updated");
+			Serial.println("Interval updated");
 		}
 	}
 	else if (cmd == "reboot")
 	{
 		bleuart.println("Rebooting...");
+		Serial.println("Rebooting...");
 		delay(1000);
 		NVIC_SystemReset();
 	}
@@ -729,6 +748,11 @@ void bleuart_rx_callback(uint16_t conn_handle)
 				 lmh_join_status_get() == LMH_SET ? "Yes" : "No",
 				 analogRead(BATTERY_PIN) * REAL_VBAT_MV_PER_LSB / 1000.0);
 		bleuart.println(status);
+		Serial.println(status);
+	}
+	else
+	{
+		bleuart.println("Unknown command");
+		Serial.println("Unknown command");
 	}
 }
-#endif
