@@ -24,25 +24,25 @@ void bleuart_rx_callback(uint16_t conn_handle);
 void initBLE(void)
 {
     Serial.println("Initializing BLE...");
-
-    Bluefruit.begin();
-    Bluefruit.setTxPower(4); // Set max power
-    Bluefruit.setName("WS85_Helium");
-    Bluefruit.autoConnLed(true);
-
     // Configure peripheral connection with maximum bandwidth
     Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
 
-    // Set connection callbacks
+	// Set connection callbacks
     Bluefruit.Periph.setConnectCallback(connect_callback);
     Bluefruit.Periph.setDisconnectCallback(disconnect_callback);
+
+    Bluefruit.begin(1,0);
+    Bluefruit.setTxPower(0); // Set max power
+    Bluefruit.setName("WS85_Helium");
+    Bluefruit.autoConnLed(true);
+
 
     // To be consistent OTA DFU should be added first if it exists
     bledfu.begin();
 
     // Configure and Start BLE Uart Service
-    bleuart.begin();
     bleuart.setRxCallback(bleuart_rx_callback);
+    bleuart.begin();
 
     // Set up and start advertising
     startAdv();
@@ -232,6 +232,7 @@ void setup()
 
 void loop()
 {
+	yield();
 #ifdef NRF52_SERIES
 	// Add at start of loop()
 	if (bleConfigMode && (millis() - bleStartTime > BLE_TIMEOUT))
@@ -253,7 +254,7 @@ void loop()
 #ifdef PRINT_WX_SERIAL
 		Serial.println(line);
 #else
-		Serial.print('.');
+		// Serial.print('.');
 #endif
 		if (line.length() > 0)
 		{
@@ -673,8 +674,9 @@ void bleuart_rx_callback(uint16_t conn_handle)
 	buf[len] = 0;
 	String cmd = String(buf);
 	cmd.trim();
-
-	if (cmd.startsWith("deveui="))
+	// Debug output to verify received data
+	Serial.println(buf);
+	if (cmd.startsWith("deveui=") || cmd.startsWith("Deveui="))
 	{
 		String eui = cmd.substring(7);
 		// Convert hex string to bytes
@@ -682,6 +684,7 @@ void bleuart_rx_callback(uint16_t conn_handle)
 		{
 			nodeDeviceEUI[i] = strtoul(eui.substring(i * 2, i * 2 + 2).c_str(), NULL, 16);
 		}
+		
 		bleuart.println("DevEUI updated");
 	}
 	else if (cmd.startsWith("appeui="))
