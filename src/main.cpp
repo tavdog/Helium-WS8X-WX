@@ -90,7 +90,7 @@ static lmh_param_t lora_param_init = {LORAWAN_ADR_ON, LORAWAN_DATERATE, LORAWAN_
 static void lorawan_has_joined_handler(void);
 static void lorawan_rx_handler(lmh_app_data_t *app_data);
 static void lorawan_confirm_class_handler(DeviceClass_t Class);
-static void send_lora_frame(void);
+// static void send_lora_frame(void);
 static uint8_t boardGetBatteryLevel(void);
 static void initReadVBAT(void);
 
@@ -114,8 +114,8 @@ static lmh_app_data_t m_lora_app_data = {m_lora_app_data_buffer, 0, 0, 0, 0};
 
 TimerEvent_t appTimer;
 static uint32_t timers_init(void);
-static uint32_t count = 0;
-static uint32_t count_fail = 0;
+// static uint32_t count = 0;
+// static uint32_t count_fail = 0;
 
 #ifdef NRF52_SERIES
 unsigned long bleStartTime = 0;
@@ -203,42 +203,44 @@ void loop()
 	}
 
 	ws8x_checkSerial();
-
 	// Check if it's time to send data
-	if (millis() - lastSendTime >= send_interval_ms && (lmh_join_status_get() == LMH_SET))
+	if (millis() - lastSendTime >= send_interval_ms)
 	{
-		lastSendTime = millis();
-
-		// After first send, switch to normal interval
-		if (!initialSendDone)
+		if (lmh_join_status_get() == LMH_SET)
 		{
-			send_interval_ms = SEND_INTERVAL * 60000;
-			initialSendDone = true;
-			Serial.printf("Switching to normal send interval: %lu minutes\n", send_interval_ms / 60000);
-		}
 
-		ws8x_populate_lora_buffer(&m_lora_app_data, LORAWAN_APP_DATA_BUFF_SIZE);
+			lastSendTime = millis();
 
-		m_lora_app_data.port = gAppPort;
-		lmh_error_status error;
-		int retryCount = 0;
-		const int maxRetries = 5;
-		do
-		{
-			error = lmh_send(&m_lora_app_data, LMH_UNCONFIRMED_MSG);
-			if (error == LMH_SUCCESS)
+			// After first send, switch to normal interval
+			if (!initialSendDone)
 			{
-				Serial.println("LoRa data sent successfully.");
-				send_error_count = 0; // reset the error_count on success.
-				break;				  // Exit the loop if the send is successful
+				send_interval_ms = SEND_INTERVAL * 60000;
+				initialSendDone = true;
+				Serial.printf("Switching to normal send interval: %lu minutes\n", send_interval_ms / 60000);
 			}
-			else
+
+			ws8x_populate_lora_buffer(&m_lora_app_data, LORAWAN_APP_DATA_BUFF_SIZE);
+
+			m_lora_app_data.port = gAppPort;
+			lmh_error_status error;
+			int retryCount = 0;
+			const int maxRetries = 5;
+			do
 			{
-				retryCount++;
-				Serial.printf("lmh_send failed with error code: %d\n", error);
-				Serial.printf("LoRa data send failed. Attempt %d of %d\n", retryCount, maxRetries);
-				delay(1000); // Optional: Add a delay between retries
-			}
+				error = lmh_send(&m_lora_app_data, LMH_UNCONFIRMED_MSG);
+				if (error == LMH_SUCCESS)
+				{
+					Serial.println("LoRa data sent successfully.");
+					send_error_count = 0; // reset the error_count on success.
+					break;				  // Exit the loop if the send is successful
+				}
+				else
+				{
+					retryCount++;
+					Serial.printf("lmh_send failed with error code: %d\n", error);
+					Serial.printf("LoRa data send failed. Attempt %d of %d\n", retryCount, maxRetries);
+					delay(1000); // Optional: Add a delay between retries
+				}
 			} while (retryCount < maxRetries);
 
 			if (retryCount == maxRetries)
@@ -252,20 +254,22 @@ void loop()
 					NVIC_SystemReset(); // Perform a system reset
 				}
 			}
-	}
-	else
-	{
-		Serial.println("Not joined to the network. Cannot send data.");
-		delay(5000);
-		send_error_count++;
-		Serial.printf("send_error_count : %d", send_error_count);
-		if (send_error_count > 5)
-		{
-			// reboot.
-			Serial.println("No Connection, Rebooting");
-			NVIC_SystemReset(); // Perform a system reset
+
 		}
-		return; // don't reset the counters just yet.
+		else
+		{
+			Serial.println("Not joined to the network. Cannot send data.");
+			delay(1000);
+			send_error_count++;
+			Serial.printf("send_error_count : %d", send_error_count);
+			if (send_error_count > 5)
+			{
+				// reboot.
+				Serial.println("No Connection, Rebooting");
+				NVIC_SystemReset(); // Perform a system reset
+			}
+			return; // don't reset the counters just yet.
+		}
 	}
 
 	ws8x_reset_counters();
@@ -359,36 +363,36 @@ void lorawan_confirm_class_handler(DeviceClass_t Class)
 	lmh_send(&m_lora_app_data, gCurrentConfirm);
 }
 
-void send_lora_frame(void)
-{
-	return;
-	if (lmh_join_status_get() != LMH_SET)
-	{
-		// Not joined, try again later
-		return;
-	}
+// void send_lora_frame(void)
+// {
+// 	return;
+// 	if (lmh_join_status_get() != LMH_SET)
+// 	{
+// 		// Not joined, try again later
+// 		return;
+// 	}
 
-	const char *message = "45 NE 25g30";
-	memset(m_lora_app_data.buffer, 0, LORAWAN_APP_DATA_BUFF_SIZE); // Clear buffer
-	m_lora_app_data.port = gAppPort;
+// 	const char *message = "45 NE 25g30";
+// 	memset(m_lora_app_data.buffer, 0, LORAWAN_APP_DATA_BUFF_SIZE); // Clear buffer
+// 	m_lora_app_data.port = gAppPort;
 
-	// Copy the string into the buffer
-	strcpy((char *)m_lora_app_data.buffer, message);
+// 	// Copy the string into the buffer
+// 	strcpy((char *)m_lora_app_data.buffer, message);
 
-	// Set the buffer size to the length of the string
-	m_lora_app_data.buffsize = strlen(message);
-	lmh_error_status error = lmh_send(&m_lora_app_data, gCurrentConfirm);
-	if (error == LMH_SUCCESS)
-	{
-		count++;
-		Serial.printf("lmh_send ok count %d\n", count);
-	}
-	else
-	{
-		count_fail++;
-		Serial.printf("lmh_send fail count %d\n", count_fail);
-	}
-}
+// 	// Set the buffer size to the length of the string
+// 	m_lora_app_data.buffsize = strlen(message);
+// 	lmh_error_status error = lmh_send(&m_lora_app_data, gCurrentConfirm);
+// 	if (error == LMH_SUCCESS)
+// 	{
+// 		count++;
+// 		Serial.printf("lmh_send ok count %d\n", count);
+// 	}
+// 	else
+// 	{
+// 		count_fail++;
+// 		Serial.printf("lmh_send fail count %d\n", count_fail);
+// 	}
+// }
 
 /**@brief Function for handling user timerout event.
  */
