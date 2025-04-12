@@ -1,5 +1,5 @@
 
-# Helium WS85 WX
+# Helium WS8x WX
 
 <img width="834" alt="Screenshot 2025-03-19 at 4 53 52 PM" src="https://github.com/user-attachments/assets/ae234304-c6d3-4232-9f90-df9a4d58c139" />
 
@@ -14,7 +14,7 @@ and the code is based on https://github.com/helium/longfi-platformio/tree/master
 ### Hardware
 The only hardware required is:
 * the [WisBlock Starter Kit](https://store.rakwireless.com/products/wisblock-starter-kit) containing  the base board with the core module installed.
-* WS85 Weather station from Ecowitt (follow this hackaday article for how to modify the station to enable serial output [WS85 Mod](https://hackaday.io/project/196990-meshtastic-ultrasonic-anemometer-wx-station) )
+* WS8x Weather station from Ecowitt (follow this hackaday article for how to modify the station to enable serial output [WS85 Mod](https://hackaday.io/project/196990-meshtastic-ultrasonic-anemometer-wx-station) )
 * A Harbor Breeze solar led lamp https://hackaday.io/project/194509-harbor-breeze-mesh-node-hack
 
 #### Antenna Type/location
