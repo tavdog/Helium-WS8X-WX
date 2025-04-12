@@ -1,12 +1,24 @@
-#include <Arduino.h>
-#include <LoRaWan-RAK4630.h>
-#include <SPI.h>
-#include <math.h>
-#include "keys.h"
+/**
+ * @file main.cpp
+ * @author Bernd Giesecke (bernd@giesecke.tk)
+ * @brief Example for WisBlock Tool Box to setup LoRa/LoRaWAN
+ * @version 0.1
+ * @date 2025-04-02
+ *
+ * @copyright Copyright (c) 2025
+ *
+ */
+#include "main.h"
 #include "ws8x.h"
-#ifdef NRF52_SERIES
-#include <bluefruit.h>
 
+#define LORAWAN_APP_DATA_BUFF_SIZE 64
+static uint8_t m_lora_app_data_buffer[LORAWAN_APP_DATA_BUFF_SIZE];
+static lmh_app_data_t m_lora_app_data = {m_lora_app_data_buffer, 0, 0, 0, 0};
+
+static bool initialSendDone = false;
+static int send_error_count = 0;
+
+// Main Interval
 //   _____ _   _ _______ ______ _______      __     _
 //  |_   _| \ | |__   __|  ____|  __ \ \    / /\   | |
 //    | | |  \| |  | |  | |__  | |__) \ \  / /  \  | |
@@ -14,214 +26,188 @@
 //   _| |_| |\  |  | |  | |____| | \ \  \  / ____ \| |____
 //  |_____|_| \_|  |_|  |______|_|  \_\  \/_/    \_\______|
 
-#define SEND_INTERVAL 5 // minutes
-static bool initialSendDone = false;
-static int send_error_count = 0;
+#define SEND_INTERVAL 1 // minutes
 
-// BLE service declarations
-BLEDfu bledfu;	 // OTA DFU service
-BLEDis bledis;	 // Device Information Service
-BLEUart bleuart; // UART over BLE
-BLEBas blebas;	 // Battery Service
-
-bool bleUARTisConnected = false;
-
-// Function declarations
-void startAdv(void);
-void connect_callback(uint16_t conn_handle);
-void disconnect_callback(uint16_t conn_handle, uint8_t reason);
-void bleuart_rx_callback(uint16_t conn_handle);
-void process_cmd(const String &cmd);
-
-void initBLE(void)
-{
-	Serial.println("Initializing BLE...");
-	// Configure peripheral connection with maximum bandwidth
-	Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
-
-	// Set connection callbacks
-	Bluefruit.Periph.setConnectCallback(connect_callback);
-	Bluefruit.Periph.setDisconnectCallback(disconnect_callback);
-
-	Bluefruit.begin(1, 0);
-	Bluefruit.setTxPower(0); // Set max power
-	Bluefruit.setName("WS8x_Helium");
-	Bluefruit.autoConnLed(true);
-
-	// To be consistent OTA DFU should be added first if it exists
-	bledfu.begin();
-
-	// Configure and Start BLE Uart Service
-	bleuart.setRxCallback(bleuart_rx_callback);
-	bleuart.begin();
-
-	// Set up and start advertising
-	startAdv();
-}
-#endif
-
-// RAK4630 supply two LED
-#ifndef LED_BUILTIN
-#define LED_BUILTIN 35
-#endif
-
-#ifndef LED_BUILTIN2
-#define LED_BUILTIN2 36
-#endif
-
-bool doOTAA = true;
-#define SCHED_MAX_EVENT_DATA_SIZE APP_TIMER_SCHED_EVENT_DATA_SIZE
-#define SCHED_QUEUE_SIZE 60
-#define LORAWAN_DATERATE DR_1
-#define LORAWAN_TX_POWER TX_POWER_5
-#define JOINREQ_NBTRIALS 3
-DeviceClass_t gCurrentClass = CLASS_A;
-lmh_confirm gCurrentConfirm = LMH_CONFIRMED_MSG;
-uint8_t gAppPort = LORAWAN_APP_PORT;
-
-#define DEVICE_NAME "WS8x_Config"
-#define BLE_TIMEOUT 300000 // 5 minutes in milliseconds
-
-/**@brief Structure containing LoRaWan parameters, needed for lmh_init()
- */
-static lmh_param_t lora_param_init = {LORAWAN_ADR_ON, LORAWAN_DATERATE, LORAWAN_PUBLIC_NETWORK, JOINREQ_NBTRIALS, LORAWAN_TX_POWER, LORAWAN_DUTYCYCLE_OFF};
-
-// Foward declaration
-static void lorawan_has_joined_handler(void);
-static void lorawan_rx_handler(lmh_app_data_t *app_data);
-static void lorawan_confirm_class_handler(DeviceClass_t Class);
-// static void send_lora_frame(void);
-static uint8_t boardGetBatteryLevel(void);
-static void initReadVBAT(void);
-
-/**@brief Structure containing LoRaWan callback functions, needed for lmh_init()
- */
-static lmh_callback_t lora_callbacks = {boardGetBatteryLevel, BoardGetUniqueId, BoardGetRandomSeed,
-										lorawan_rx_handler, lorawan_has_joined_handler, lorawan_confirm_class_handler};
-
-// OTAA keys !!!! KEYS ARE MSB !!!!
-//  NOTE : FILL IN THE THREE REQUIRED HELIUM NETWORK CREDENTIALS WITH YOUR VALUES AND DELETE THIS LINE
-
-uint8_t nodeDeviceEUI[8] = NODE_DEVICE_EUI;
-uint8_t nodeAppEUI[8] = NODE_APP_EUI;
-uint8_t nodeAppKey[16] = NODE_APP_KEY;
-
-// Private defination
-#define LORAWAN_APP_DATA_BUFF_SIZE 64
-#define LORAWAN_APP_INTERVAL 300000 // not used
-static uint8_t m_lora_app_data_buffer[LORAWAN_APP_DATA_BUFF_SIZE];
-static lmh_app_data_t m_lora_app_data = {m_lora_app_data_buffer, 0, 0, 0, 0};
-
-TimerEvent_t appTimer;
-static uint32_t timers_init(void);
-// static uint32_t count = 0;
-// static uint32_t count_fail = 0;
-
-#ifdef NRF52_SERIES
-unsigned long bleStartTime = 0;
-bool bleConfigMode = false;
-#endif
-
+// Timer for sending data
 unsigned long lastSendTime = 0;
 unsigned long send_interval_ms = SEND_INTERVAL * 60000;
 
-void setup()
+/** Flag for the event type */
+volatile uint16_t g_task_event_type = NO_EVENT;
+
+/** Set the device name, max length is 10 characters */
+char g_ble_dev_name[10] = "WS8X";
+
+/** Set firmware version */
+uint16_t g_sw_ver_1 = 1; // major version increase on API change / not backwards compatible
+uint16_t g_sw_ver_2 = 0; // minor version increase on API change / backward compatible
+uint16_t g_sw_ver_3 = 0; // patch version increase on bugfix, no affect on API
+
+/** Timer for frequent packet sending */
+time_t last_send;
+
+/**
+ * @brief Arduino setup, called once
+ *
+ */
+void setup(void)
 {
-	pinMode(LED_BUILTIN, OUTPUT);
-	digitalWrite(LED_BUILTIN, LOW);
+	// flash_reset();
+	// Initialize the built in LED
+	pinMode(LED_GREEN, OUTPUT);
+	digitalWrite(LED_GREEN, LOW);
 
-	// Initialize LoRa chip.
-	lora_rak4630_init();
-	delay(5000);
-	// Initialize Serial for debug output
+	// Initialize the BLE status LED
+	pinMode(LED_BLUE, OUTPUT);
+	digitalWrite(LED_BLUE, LOW);
+
+	// Initialize Serial
 	Serial.begin(115200);
-	ws8x_init();
 
-	Serial.println("=====================================");
-	Serial.println("Welcome to RAK4630 LoRaWan!!!");
-	Serial.println("Type: OTAA");
-
-	Serial.println("Built against SX126x-Arduino version 2.x");
-
-	// creat a user timer to send data to server period
-	uint32_t err_code;
-	err_code = timers_init();
-	if (err_code != 0)
+	time_t serial_timeout = millis();
+	// On nRF52840 the USB serial is not available immediately
+	while (!Serial)
 	{
-		Serial.printf("timers_init failed - %d\n", err_code);
+		if ((millis() - serial_timeout) < 5000)
+		{
+			delay(100);
+			digitalWrite(LED_GREEN, !digitalRead(LED_GREEN));
+		}
+		else
+		{
+			break;
+		}
+	}
+	digitalWrite(LED_GREEN, HIGH);
+
+	// Get LoRa parameter
+	init_flash();
+
+	// Enable BLE
+	APP_LOG("SETUP", "Init BLE");
+
+	// Init BLE
+	init_ble();
+
+	// If P2P mode, override auto join setting
+	if (!g_lorawan_settings.lorawan_enable)
+	{
+		g_lorawan_settings.auto_join = true;
 	}
 
-	// Setup the EUIs and Keys
-	lmh_setDevEui(nodeDeviceEUI);
-	lmh_setAppEui(nodeAppEUI);
-	lmh_setAppKey(nodeAppKey);
-
-	// Initialize LoRaWan
-
-	// SX126x-Arduino version 2.x API
-	err_code = lmh_init(&lora_callbacks, lora_param_init, doOTAA, CLASS_A, LORAMAC_REGION_US915);
-
-	if (err_code != 0)
+	// LoRaWAN initialization
+	// Check if auto join is enabled
+	if (g_lorawan_settings.auto_join || 1)
 	{
-		Serial.printf("lmh_init failed - %d\n", err_code);
+		// Initialize LoRa and start join request
+		int8_t lora_init_result = 0;
+		if (g_lorawan_settings.lorawan_enable)
+		{
+			APP_LOG("SETUP", "Auto join is enabled, start LoRaWAN and join");
+			lora_init_result = init_lorawan();
+		}
+		else
+		{
+			APP_LOG("API", "Auto join is enabled, start LoRa P2P listen");
+			lora_init_result = init_lora();
+		}
+
+		if (lora_init_result != 0)
+		{
+			APP_LOG("SETUP", "Init LoRa failed");
+			APP_LOG("SETUP", "Get your LoRa stuff in order");
+		}
+		else
+		{
+			APP_LOG("SETUP", "LoRa init success");
+		}
+	}
+	else
+	{
+		// Put radio into sleep mode
+		lora_rak4630_init();
+		Radio.Sleep();
+
+		APP_LOG("SETUP", "Auto join is disabled, waiting for connect command");
+		delay(100);
 	}
 
-	// Start Join procedure
-	Serial.println("Starting Join");
-	lmh_join();
-	Serial.println("Return from join");
-	send_interval_ms = 30000; // Start with 30 second interval
-	Serial.println("Initial send interval: 30 seconds");
-	Serial.println("Will revert to normal interval after first send");
-	initReadVBAT();
+	// Keep BLE advertising forever
+	restart_advertising(0);
 
-#ifdef NRF52_SERIES
-	initBLE();
-#endif
+	// Set time for sending a packet
+	last_send = millis();
+	if (g_lorawan_settings.send_repeat_time == 0) {
+		APP_LOG("SETUP", "setting interval to default:  %d sec", send_interval_ms/1000);
+		g_lorawan_settings.send_repeat_time = send_interval_ms;
+	} else {
+		APP_LOG("SETUP", "interval set to:  %d sec", g_lorawan_settings.send_repeat_time/1000 );
+		}
+
+		ws8x_init();
 }
 
-void loop()
+/**
+ * @brief Arduino loop
+ *
+ */
+void loop(void)
 {
-	// Add at start of loop()
-	if (bleConfigMode && (millis() - bleStartTime > BLE_TIMEOUT))
+	// BLE UART event (AT commands)
+	if ((g_task_event_type & BLE_DATA) == BLE_DATA)
 	{
-		Serial.println("BLE config timeout, rebooting...");
-		NVIC_SystemReset();
+		g_task_event_type &= N_BLE_DATA;
+		// Send it to AT command parser
+		while (g_ble_uart.available() > 0)
+		{
+			at_serial_input(uint8_t(g_ble_uart.read()));
+			delay(5);
+		}
+		at_serial_input(uint8_t('\n'));
 	}
 
-	// Process commands from Serial
-	if (Serial.available() > 0)
+	// BLE config characteristic received
+	if ((g_task_event_type & BLE_CONFIG) == BLE_CONFIG)
 	{
-		String cmd = Serial.readStringUntil('\n'); // Read command from Serial
-		cmd.trim();								   // Remove leading/trailing whitespace
-		if (cmd.length() > 0)
+		g_task_event_type &= N_BLE_CONFIG;
+		APP_LOG("LOOP", "Config received over BLE");
+		delay(100);
+
+		// Inform connected device about new settings
+		g_lora_data.write((void *)&g_lorawan_settings, sizeof(s_lorawan_settings));
+		g_lora_data.notify((void *)&g_lorawan_settings, sizeof(s_lorawan_settings));
+	}
+
+	// Serial input event (AT commands)
+	if ((g_task_event_type & AT_CMD) == AT_CMD)
+	{
+		g_task_event_type &= N_AT_CMD;
+		while (Serial.available() > 0)
 		{
-			// Serial.print("Processing command from Serial: ");
-			Serial.println(cmd);
-			process_cmd(cmd); // Pass the command to process_cmd
+			at_serial_input(uint8_t(Serial.read()));
+			delay(5);
 		}
 	}
 
 	ws8x_checkSerial();
-	// Check if it's time to send data
-	if (millis() - lastSendTime >= send_interval_ms)
+	// if time to send.  if initialsend yet to happen use interim interval of 60 seconds.
+	if (millis() - lastSendTime >= g_lorawan_settings.send_repeat_time || (!initialSendDone && millis() - lastSendTime >= 60000 ))
 	{
 		if (lmh_join_status_get() == LMH_SET)
 		{
 
 			lastSendTime = millis();
 
-			// After first send, switch to normal interval
+			// After first send, switch to normal interval AT+SENDINT=
 			if (!initialSendDone)
 			{
-				send_interval_ms = SEND_INTERVAL * 60000;
 				initialSendDone = true;
-				Serial.printf("Switching to normal send interval: %lu minutes\n", send_interval_ms / 60000);
+				Serial.printf("Switching to normal send interval: %lu minutes\n", g_lorawan_settings.send_repeat_time / 60000);
 			}
 
 			ws8x_populate_lora_buffer(&m_lora_app_data, LORAWAN_APP_DATA_BUFF_SIZE);
 
-			m_lora_app_data.port = gAppPort;
+			m_lora_app_data.port = LORAWAN_APP_PORT;
 			lmh_error_status error;
 			int retryCount = 0;
 			const int maxRetries = 5;
@@ -231,8 +217,9 @@ void loop()
 				if (error == LMH_SUCCESS)
 				{
 					Serial.println("LoRa data sent successfully.");
-					send_error_count = 0; // reset the error_count on success.
-					break;				  // Exit the loop if the send is successful
+					send_error_count = 0;  // reset the error_count on success.
+					ws8x_reset_counters(); // reset the averaging counters.
+					break;				   // Exit the loop if the send is successful
 				}
 				else
 				{
@@ -254,7 +241,6 @@ void loop()
 					NVIC_SystemReset(); // Perform a system reset
 				}
 			}
-
 		}
 		else
 		{
@@ -268,27 +254,10 @@ void loop()
 				Serial.println("No Connection, Rebooting");
 				NVIC_SystemReset(); // Perform a system reset
 			}
-			return; // don't reset the counters just yet.
 		}
 	}
 
-	ws8x_reset_counters();
-
-}
-
-void initReadVBAT(void)
-{
-	// Set the analog reference to 3.0V (default = 3.6V)
-	analogReference(AR_INTERNAL_3_0);
-
-	// Set the resolution to 12-bit (0..4095)
-	analogReadResolution(12); // Can be 8, 10, 12 or 14
-
-	// Let the ADC settle
-	delay(1);
-
-	// Get a single ADC sample and throw it away
-	boardGetBatteryLevel();
+	yield();
 }
 
 uint8_t boardGetBatteryLevel(void)
@@ -311,225 +280,13 @@ uint8_t boardGetBatteryLevel(void)
 	// Calculate percentage (1-254 range)
 	uint8_t level = 1 + ((voltage - MIN_VOLTAGE) / (MAX_VOLTAGE - MIN_VOLTAGE)) * 253;
 	return level;
-}
+	// float raw;
 
-/**@brief LoRa function for handling HasJoined event.
- */
-void lorawan_has_joined_handler(void)
-{
-	Serial.println("OTAA Mode, Network Joined!");
+	// // Get the raw 12-bit, 0..3000mV ADC value
+	// raw = analogRead(BATTERY_PIN);
 
-	lmh_error_status ret = lmh_class_request(gCurrentClass);
-	if (ret == LMH_SUCCESS)
-	{
-		delay(1000);
-		TimerSetValue(&appTimer, LORAWAN_APP_INTERVAL);
-		TimerStart(&appTimer);
-	}
-}
-
-/**@brief Function for handling LoRaWan received data from Gateway
- *
- * @param[in] app_data  Pointer to rx data
- */
-void lorawan_rx_handler(lmh_app_data_t *app_data)
-{
-	Serial.printf("LoRa Packet received on port %d, size:%d, rssi:%d, snr:%d, data:%s\n",
-				  app_data->port, app_data->buffsize, app_data->rssi, app_data->snr, app_data->buffer);
-	// Check if the buffer contains a valid integer for the send interval
-	if (app_data->buffsize > 0 && isdigit(app_data->buffer[0]))
-	{
-		int new_interval = atoi((const char *)app_data->buffer); // Convert buffer to integer
-		if (new_interval > 0)
-		{
-			Serial.printf("Setting send interval to %d minutes\n", new_interval);
-			send_interval_ms = new_interval * 60000; // Convert minutes to milliseconds
-		}
-	}
-	// Check if the buffer contains the "reboot" command
-	else if (String("reboot").equals(String((const char *)app_data->buffer)))
-	{
-		Serial.println("Got reboot command");
-		NVIC_SystemReset(); // Perform a system reset
-	}
-}
-
-void lorawan_confirm_class_handler(DeviceClass_t Class)
-{
-	Serial.printf("switch to class %c done\n", "ABC"[Class]);
-	// Informs the server that switch has occurred ASAP
-	m_lora_app_data.buffsize = 0;
-	m_lora_app_data.port = gAppPort;
-	lmh_send(&m_lora_app_data, gCurrentConfirm);
-}
-
-// void send_lora_frame(void)
-// {
-// 	return;
-// 	if (lmh_join_status_get() != LMH_SET)
-// 	{
-// 		// Not joined, try again later
-// 		return;
-// 	}
-
-// 	const char *message = "45 NE 25g30";
-// 	memset(m_lora_app_data.buffer, 0, LORAWAN_APP_DATA_BUFF_SIZE); // Clear buffer
-// 	m_lora_app_data.port = gAppPort;
-
-// 	// Copy the string into the buffer
-// 	strcpy((char *)m_lora_app_data.buffer, message);
-
-// 	// Set the buffer size to the length of the string
-// 	m_lora_app_data.buffsize = strlen(message);
-// 	lmh_error_status error = lmh_send(&m_lora_app_data, gCurrentConfirm);
-// 	if (error == LMH_SUCCESS)
-// 	{
-// 		count++;
-// 		Serial.printf("lmh_send ok count %d\n", count);
-// 	}
-// 	else
-// 	{
-// 		count_fail++;
-// 		Serial.printf("lmh_send fail count %d\n", count_fail);
-// 	}
-// }
-
-/**@brief Function for handling user timerout event.
- */
-void tx_lora_periodic_handler(void)
-{
-	TimerSetValue(&appTimer, LORAWAN_APP_INTERVAL);
-	TimerStart(&appTimer);
-}
-
-/**@brief Function for the Timer initialization.
- *
- * @details Initializes the timer module. This creates and starts application timers.
- */
-uint32_t timers_init(void)
-{
-	TimerInit(&appTimer, tx_lora_periodic_handler);
-	return 0;
-}
-
-void startAdv(void)
-{
-	Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
-	Bluefruit.Advertising.addTxPower();
-	Bluefruit.Advertising.addName();
-	Bluefruit.Advertising.addService(bleuart); // Add UART service to advertising
-
-	Bluefruit.Advertising.restartOnDisconnect(true);
-	Bluefruit.Advertising.setInterval(32, 244);
-	Bluefruit.Advertising.setFastTimeout(30);
-	Bluefruit.Advertising.start(0);
-}
-
-void connect_callback(uint16_t conn_handle)
-{
-	(void)conn_handle;
-	bleUARTisConnected = true;
-	bleStartTime = millis();
-	bleConfigMode = true;
-
-	// Optional: Print connection info
-	BLEConnection *connection = Bluefruit.Connection(conn_handle);
-	char central_name[32] = {0};
-	connection->getPeerName(central_name, sizeof(central_name));
-	Serial.print("Connected to ");
-	Serial.println(central_name);
-}
-
-void disconnect_callback(uint16_t conn_handle, uint8_t reason)
-{
-	(void)conn_handle;
-	(void)reason;
-	bleUARTisConnected = false;
-	bleConfigMode = false;
-	Serial.println("Disconnected");
-}
-
-void bleuart_rx_callback(uint16_t conn_handle)
-{
-	// Only process if we're connected
-	if (!bleUARTisConnected)
-		return;
-
-	char buf[64];
-	uint16_t len = bleuart.read(buf, sizeof(buf) - 1);
-	buf[len] = 0;
-	String cmd = String(buf);
-	cmd.trim();
-	// Debug output to verify received data
-	Serial.println(buf);
-	process_cmd(cmd);
-}
-
-// Function to process BLE commands
-void process_cmd(const String &cmd)
-{
-	if (cmd.startsWith("deveui=") || cmd.startsWith("Deveui="))
-	{
-		String eui = cmd.substring(7);
-		// Convert hex string to bytes
-		for (int i = 0; i < 8; i++)
-		{
-			nodeDeviceEUI[i] = strtoul(eui.substring(i * 2, i * 2 + 2).c_str(), NULL, 16);
-		}
-		bleuart.println("DevEUI updated");
-		Serial.println("DevEUI updated");
-	}
-	else if (cmd.startsWith("appeui="))
-	{
-		String eui = cmd.substring(7);
-		for (int i = 0; i < 8; i++)
-		{
-			nodeAppEUI[i] = strtoul(eui.substring(i * 2, i * 2 + 2).c_str(), NULL, 16);
-		}
-		bleuart.println("AppEUI updated");
-		Serial.println("AppEUI updated");
-	}
-	else if (cmd.startsWith("appkey="))
-	{
-		String key = cmd.substring(7);
-		for (int i = 0; i < 16; i++)
-		{
-			nodeAppKey[i] = strtoul(key.substring(i * 2, i * 2 + 2).c_str(), NULL, 16);
-		}
-		bleuart.println("AppKey updated");
-		Serial.println("AppKey updated");
-	}
-	else if (cmd.startsWith("interval="))
-	{
-		int newInterval = cmd.substring(9).toInt();
-		if (newInterval > 0)
-		{
-			send_interval_ms = newInterval * 60000;
-			bleuart.println("Interval updated");
-			Serial.println("Interval updated");
-		}
-	}
-	else if (cmd == "reboot")
-	{
-		bleuart.println("Rebooting...");
-		Serial.println("Rebooting...");
-		delay(1000);
-		NVIC_SystemReset();
-	}
-	else if (cmd == "status")
-	{
-		char status[128];
-		snprintf(status, sizeof(status),
-				 "Interval: %lu min\nJoined: %s\nBattery: %.2fV",
-				 send_interval_ms / 60000,
-				 lmh_join_status_get() == LMH_SET ? "Yes" : "No",
-				 analogRead(BATTERY_PIN) * REAL_VBAT_MV_PER_LSB / 1000.0);
-		bleuart.println(status);
-		Serial.println(status);
-	}
-	else
-	{
-		bleuart.println("Unknown command");
-		Serial.println("Unknown command");
-	}
+	// // Convert the raw value to compensated mv, taking the resistor-
+	// // divider into account (providing the actual LIPO voltage)
+	// // ADC range is 0..3000mV and resolution is 12-bit (0..4095)
+	// return (uint8_t)(raw * REAL_VBAT_MV_PER_LSB *2.55);
 }

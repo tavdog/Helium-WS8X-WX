@@ -1,27 +1,50 @@
+# RAK4631-BLE-LORA-Setup
+Example for RAK4631 LoRa/LoRaWAN setup over BLE and with AT commands     
+Written for PlatformIO, but can be used in Arduino IDE by renaming **`main.cpp`** to **`src.ino`** and open it with Arduino IDE    
 
-# Helium WS8x WX
+Required library is only beegee-tokyo/SX126x-Arduino    
 
-<img width="834" alt="Screenshot 2025-03-19 at 4 53 52 PM" src="https://github.com/user-attachments/assets/ae234304-c6d3-4232-9f90-df9a4d58c139" />
+Kept as simple as possible, but to setup the device it requires
+- save and read settings from flash ==> [flash-nrf52.cpp](./flash-nrf52.cpp)
+- enable BLE advertising and initialize BLE characteristics for BLE UART and custom settings ==> [ble-nrf52.cpp](./ble-nrf52.cpp)
+- AT command parser ==> [at_cmd.cpp](./at_cmd.cpp)
+- LoRa and LoRaWAN basic functionality, as the AT command parser needs information from LoRa and LoRaWAN driver [lora.cpp](./lora.cpp) & [lorawan.cpp](./lorawan.cpp)
 
-## Overview  
-This repository contains a **basic example** of a **WisBlock/Helium** embedded project using **PlatformIO** as the development environment instead of the Arduino IDE.  
+## Important #1
+The AT commands are compatible with the [RUI3 AT commands](https://docs.rakwireless.com/product-categories/software-apis-and-libraries/rui3/at-command-manual).      
+But only essential commands are implemented here.
 
-This project joins the **Helium network** and periodically transmits **weather (WX) data** from a **WS85 serial output** to the **Helium network**.  
+Available commands can be queried over USB or BLE UART with **`AT?`**    
 
-The build setup is based on https://docs.helium.com/network-iot/devices/development/rakwireless/wisblock-4631/platformio
-and the code is based on https://github.com/helium/longfi-platformio/tree/master/RAKWireless-WisBlock/examples/LoRaWan_OTAA
+AT commands _**MUST**_ be ending with **`/r/n`**.     
 
-### Hardware
-The only hardware required is:
-* the [WisBlock Starter Kit](https://store.rakwireless.com/products/wisblock-starter-kit) containing  the base board with the core module installed.
-* WS8x Weather station from Ecowitt (follow this hackaday article for how to modify the station to enable serial output [WS85 Mod](https://hackaday.io/project/196990-meshtastic-ultrasonic-anemometer-wx-station) )
-* A Harbor Breeze solar led lamp https://hackaday.io/project/194509-harbor-breeze-mesh-node-hack
+## Optional
+In addition to AT commands over USB or BLE UART, the settings can be setup with the [WisBlock Tool Box](https://play.google.com/store/apps/details?id=tk.giesecke.wisblock_toolbox). But WisBlock Tool Box might not be supported by the latest Android versions.
 
-#### Antenna Type/location
-The WisBlock starter kit comes with two antenna types, 
-* the one that resembles an "I" is the LoRa antenna, this one connects to the connector on the core moduke marked LoRa, which is below the large K in the RAK logo.
-* the one that resembles a "T" is the BLE antenna, this one connects to the connector on the core module marked BLE
+## Important #2
+The different parts need to be initialized in **`setup()`**
+```cpp
+	// Get LoRa parameter
+	init_flash();
 
-<img width="541" alt="Screenshot 2025-03-19 at 4 50 39 PM" src="https://github.com/user-attachments/assets/bd7be7ab-d512-480e-9969-85c8ac52fb5f" />
+	// Enable BLE
+	APP_LOG("SETUP", "Init BLE");
 
+	// Init BLE
+	init_ble();
+```
 
+It is recommended to keep [flash-nrf52.cpp](./flash-nrf52.cpp), [ble-nrf52.cpp](./ble-nrf52.cpp), [at_cmd.cpp](./at_cmd.cpp), [lora.cpp](./lora.cpp) and [lorawan.cpp](./lorawan.cpp) unchanged and build your code around this example.    
+
+## Important #3
+BLE is kept advertising all the time for testing purposes. To change the advertising time after restart, change
+```cpp
+	// Keep BLE advertising forever
+	restart_advertising(0);
+```
+in **`setup()`** by changing the **`0`** to an interval in seconds that you want the BLE to be active before it shuts down for power savings.
+
+A more detailed README will be written when I find the time for it.
+
+## Important #4
+_**This was put together from different applications I wrote, mainly from the [WisBlock-API-V2](https://github.com/beegee-tokyo/WisBlock-API-V2) and is not complete tested. Use it on your own risk!**_
