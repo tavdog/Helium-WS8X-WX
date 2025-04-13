@@ -107,7 +107,7 @@ void ws8x_checkSerial()
         Serial.println("Maximum serial reading iterations reached");
     }
 }
-void ws8x_populate_lora_buffer(uint8_t *m_lora_app_data, int size)
+void ws8x_populate_lora_buffer(uint8_t* m_lora_app_data, int size)
 {
     // Calculate averages
     float velAvg = (velCount > 0) ? velSum / velCount : 0;
@@ -149,38 +149,39 @@ void ws8x_populate_lora_buffer(uint8_t *m_lora_app_data, int size)
     int16_t intCapVoltageF = (int16_t)(roundedCapVoltageF * 100);  // Scale to 2 decimal places
     int16_t intTemperatureF = (int16_t)(roundedTemperatureF * 10); // Scale to 1 decimal place
     uint16_t intRain = (uint16_t)(roundedRain * 10);               // Scale to 1 decimal place
-    uint16_t deviceVoltage_mv = (uint16_t)(analogRead(BATTERY_PIN) * REAL_VBAT_MV_PER_LSB);
+    #define BATTERY_PIN 0
+    uint16_t deviceVoltage_mv = (uint16_t)(analogRead(BATTERY_PIN)); // * REAL_VBAT_MV_PER_LSB);
     // Pack the integers into the buffer in a specific order
     int offset = 0;
-    memcpy(&m_lora_app_data->buffer[offset], &intDirAvg, sizeof(int16_t));
+    memcpy(&m_lora_app_data[offset], &intDirAvg, sizeof(int16_t));
     offset += sizeof(int16_t);
-    memcpy(&m_lora_app_data->buffer[offset], &intVelAvg, sizeof(int16_t));
+    memcpy(&m_lora_app_data[offset], &intVelAvg, sizeof(int16_t));
     offset += sizeof(int16_t);
-    memcpy(&m_lora_app_data->buffer[offset], &intGust, sizeof(int16_t));
+    memcpy(&m_lora_app_data[offset], &intGust, sizeof(int16_t));
     offset += sizeof(int16_t);
-    memcpy(&m_lora_app_data->buffer[offset], &intLull, sizeof(int16_t));
+    memcpy(&m_lora_app_data[offset], &intLull, sizeof(int16_t));
     offset += sizeof(int16_t);
-    memcpy(&m_lora_app_data->buffer[offset], &intBatVoltageF, sizeof(int16_t));
+    memcpy(&m_lora_app_data[offset], &intBatVoltageF, sizeof(int16_t));
     offset += sizeof(int16_t);
-    memcpy(&m_lora_app_data->buffer[offset], &intCapVoltageF, sizeof(int16_t));
+    memcpy(&m_lora_app_data[offset], &intCapVoltageF, sizeof(int16_t));
     offset += sizeof(int16_t);
-    memcpy(&m_lora_app_data->buffer[offset], &intTemperatureF, sizeof(int16_t));
+    memcpy(&m_lora_app_data[offset], &intTemperatureF, sizeof(int16_t));
     offset += sizeof(int16_t);
-    memcpy(&m_lora_app_data->buffer[offset], &intRain, sizeof(uint16_t));
+    memcpy(&m_lora_app_data[offset], &intRain, sizeof(uint16_t));
     offset += sizeof(uint16_t);
-    memcpy(&m_lora_app_data->buffer[offset], &deviceVoltage_mv, sizeof(uint16_t));
+    memcpy(&m_lora_app_data[offset], &deviceVoltage_mv, sizeof(uint16_t));
     offset += sizeof(uint16_t);
 
     // Print debug information
     Serial.print("Payload bytes: ");
-    for (int i = 0; i < m_lora_app_data->buffsize; i++)
+    for (int i = 0; i < offset; i++)
     {
-        Serial.printf("%02X", m_lora_app_data->buffer[i]);
+        Serial.printf("%02X", &m_lora_app_data[i]);
     }
     Serial.println();
 
     // Set the buffer size to the total number of bytes
-    m_lora_app_data->buffsize = offset;
+    // m_lora_app_data->buffsize = offset;
 }
 
 void ws8x_reset_counters() {
