@@ -65,7 +65,7 @@ void setup()
 	boardInitMcu();
 	Serial.begin(115200);
 #if (AT_SUPPORT)
-	enableAt();
+	// enableAt();
 #endif
 	deviceState = DEVICE_STATE_INIT;
 	LoRaWAN.ifskipjoin();
