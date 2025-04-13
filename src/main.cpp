@@ -1,5 +1,6 @@
 #include "LoRaWan_APP.h"
 #include "Arduino.h"
+#include "ws8x.h"
 #include "keys.h"
 
 /* OTAA para*/
@@ -22,7 +23,7 @@ LoRaMacRegion_t loraWanRegion = ACTIVE_REGION;
 DeviceClass_t loraWanClass = LORAWAN_CLASS;
 
 /*the application data transmission duty cycle.  value in [ms].*/
-uint32_t appTxDutyCycle = 15000;
+uint32_t appTxDutyCycle = 30000;
 
 /*OTAA or ABP*/
 bool overTheAirActivation = LORAWAN_NETMODE;
@@ -52,7 +53,7 @@ static void prepareTxFrame(uint8_t port)
 	 *for example, if use REGION_CN470,
 	 *the max value for different DR can be found in MaxPayloadOfDatarateCN470 refer to DataratesCN470 and BandwidthsCN470 in "RegionCN470.h".
 	 */
-	appDataSize = 4;
+	appDataSize = 16;
 	appData[0] = 0x00;
 	appData[1] = 0x01;
 	appData[2] = 0x02;
@@ -68,6 +69,7 @@ void setup()
 #endif
 	deviceState = DEVICE_STATE_INIT;
 	LoRaWAN.ifskipjoin();
+
 }
 
 void loop()
@@ -91,7 +93,8 @@ void loop()
 	}
 	case DEVICE_STATE_SEND:
 	{
-		prepareTxFrame(appPort);
+		ws8x_populate_lora_buffer(appData, appDataSize);
+		// prepareTxFrame(appPort);
 		LoRaWAN.send();
 		deviceState = DEVICE_STATE_CYCLE;
 		break;
@@ -115,4 +118,5 @@ void loop()
 		break;
 	}
 	}
+	ws8x_checkSerial();
 }
