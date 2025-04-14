@@ -29,17 +29,16 @@ void ws8x_checkSerial()
 {
     const int maxIterations = 100; // Maximum number of lines to read per loop
     int iterationCount = 0;
-
     // Check if data is available on the serial port
-    while (Serial1.available() > 0 && iterationCount < maxIterations)
+    while (Serial.available() > 0 && iterationCount < maxIterations)
     {
         iterationCount++;
-        String line = Serial1.readStringUntil('\n');
+        String line = Serial.readStringUntil('\n');
         line.trim();
 #ifdef PRINT_WX_SERIAL
         Serial.println(line);
 #else
-        // Serial.print('.');
+        Serial.print('.');
 #endif
         if (line.length() > 0)
         {
@@ -176,7 +175,7 @@ void ws8x_populate_lora_buffer(uint8_t* m_lora_app_data, int size)
     Serial.print("Payload bytes: ");
     for (int i = 0; i < offset; i++)
     {
-        Serial.printf("%02X", &m_lora_app_data[i]);
+        Serial.printf("%02X", m_lora_app_data[i]);  // Removed the &
     }
     Serial.println();
 

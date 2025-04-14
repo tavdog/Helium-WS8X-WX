@@ -1,0 +1,20 @@
+========== WH80 Ver:1.2.8 ===========
+>> RF_FreqSel = 915M
+>> Device_ID  = 0x02DC9
+-------------------------------------
+WindDir      = 96
+WindSpeed    = 2.6
+WindGust     = 3.5
+
+Not Detected TH-Sensor!
+Temperature  = --
+Humi         = --
+
+Not Detected Light&UVI Sensor!
+Light        = --
+UV_Value     = --
+
+Not Detected Pressure Sensor!
+Pressure     = --
+
+BatVoltage      = 2.60V

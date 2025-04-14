@@ -3,6 +3,7 @@
 #include "ws8x.h"
 #include "keys.h"
 
+extern bool wakeByUart;
 /* OTAA para*/
 uint8_t devEui[8] = NODE_DEVICE_EUI;
 uint8_t appEui[8] = NODE_APP_EUI;
@@ -23,7 +24,7 @@ LoRaMacRegion_t loraWanRegion = ACTIVE_REGION;
 DeviceClass_t loraWanClass = LORAWAN_CLASS;
 
 /*the application data transmission duty cycle.  value in [ms].*/
-uint32_t appTxDutyCycle = 30000;
+uint32_t appTxDutyCycle = 60000;
 
 /*OTAA or ABP*/
 bool overTheAirActivation = LORAWAN_NETMODE;
@@ -53,7 +54,7 @@ static void prepareTxFrame(uint8_t port)
 	 *for example, if use REGION_CN470,
 	 *the max value for different DR can be found in MaxPayloadOfDatarateCN470 refer to DataratesCN470 and BandwidthsCN470 in "RegionCN470.h".
 	 */
-	appDataSize = 16;
+	appDataSize = 18;
 	appData[0] = 0x00;
 	appData[1] = 0x01;
 	appData[2] = 0x02;
@@ -64,23 +65,28 @@ void setup()
 {
 	boardInitMcu();
 	Serial.begin(115200);
-#if (AT_SUPPORT)
-	// enableAt();
-#endif
+	delay(5000);
+// #if (AT_SUPPORT)
+// 	enableAt();
+// #endif
 	deviceState = DEVICE_STATE_INIT;
 	LoRaWAN.ifskipjoin();
+	
+	wakeByUart = true;
 
 }
 
 void loop()
 {
+	ws8x_checkSerial();
+	// Serial.print(".");
 	switch (deviceState)
 	{
 	case DEVICE_STATE_INIT:
 	{
-#if (AT_SUPPORT)
-		getDevParam();
-#endif
+// #if (AT_SUPPORT)
+// 		getDevParam();
+// #endif
 		printDevParam();
 		LoRaWAN.init(loraWanClass, loraWanRegion);
 		deviceState = DEVICE_STATE_JOIN;
@@ -109,6 +115,7 @@ void loop()
 	}
 	case DEVICE_STATE_SLEEP:
 	{
+
 		LoRaWAN.sleep();
 		break;
 	}
@@ -118,5 +125,5 @@ void loop()
 		break;
 	}
 	}
-	ws8x_checkSerial();
+
 }
