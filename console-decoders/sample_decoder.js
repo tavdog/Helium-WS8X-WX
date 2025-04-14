@@ -1,8 +1,9 @@
+// WS8X decoder for HeliumConsole
 function Decoder(bytes, port, uplink_info) {
 
   // Ensure the payload length matches the expected size
-  if (bytes.length !== 16) {
-    throw new Error("Invalid payload size. Expected 16 bytes.");
+  if (bytes.length < 16) {
+    throw new Error("Short payload size. Expected 16 bytes.");
   }
 
   // Helper function to read a 16-bit signed integer
@@ -33,6 +34,8 @@ function Decoder(bytes, port, uplink_info) {
   offset += 2;
   const rain = readUInt16LE(offset) / 10.0; // Scale back to 1 decimal place
   offset += 2;
+  const device_mv = readUInt16LE(offset); // no scaled ms val
+  offset += 2;
 
   // Return the decoded values as a JSON object
   return JSON.stringify({
@@ -43,6 +46,7 @@ function Decoder(bytes, port, uplink_info) {
     batV: batVoltageF,
     capV: capVoltageF,
     tempC: temperatureF,
-    rainmm: rain
+    rainmm: rain,
+    node_mv: device_mv
   });
 }

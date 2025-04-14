@@ -108,6 +108,8 @@ void ws8x_checkSerial()
 }
 void ws8x_populate_lora_buffer(uint8_t* m_lora_app_data, int size)
 {
+    uint16_t deviceVoltage_mv = getBatteryVoltage(); // * REAL_VBAT_MV_PER_LSB);
+    Serial.printf("Battery voltage : %d\n\r", deviceVoltage_mv);
     // Calculate averages
     float velAvg = (velCount > 0) ? velSum / velCount : 0;
     double avgSin = (dirCount > 0) ? dir_sum_sin / dirCount : 0;
@@ -122,7 +124,7 @@ void ws8x_populate_lora_buffer(uint8_t* m_lora_app_data, int size)
                   velAvg, (int)dirAvg, gust, lull);
     Serial.printf("Battery Voltage: %.1f V, Capacitor Voltage: %.1f V, Temperature: %.1f °C\n",
                   batVoltageF, capVoltageF, temperatureF);
-    Serial.printf("Rain: %.1f mm, Rain Sum: %d\n", rain, rainSum);
+    Serial.printf("Rain: %.1f mm, Device mv : %d\n", rain, deviceVoltage_mv);
 
     // Populate the buffer
 
@@ -148,8 +150,6 @@ void ws8x_populate_lora_buffer(uint8_t* m_lora_app_data, int size)
     int16_t intCapVoltageF = (int16_t)(roundedCapVoltageF * 100);  // Scale to 2 decimal places
     int16_t intTemperatureF = (int16_t)(roundedTemperatureF * 10); // Scale to 1 decimal place
     uint16_t intRain = (uint16_t)(roundedRain * 10);               // Scale to 1 decimal place
-    #define BATTERY_PIN 0
-    uint16_t deviceVoltage_mv = (uint16_t)(analogRead(BATTERY_PIN)); // * REAL_VBAT_MV_PER_LSB);
     // Pack the integers into the buffer in a specific order
     int offset = 0;
     memcpy(&m_lora_app_data[offset], &intDirAvg, sizeof(int16_t));
@@ -178,9 +178,6 @@ void ws8x_populate_lora_buffer(uint8_t* m_lora_app_data, int size)
         Serial.printf("%02X", m_lora_app_data[i]);  // Removed the &
     }
     Serial.println();
-
-    // Set the buffer size to the total number of bytes
-    // m_lora_app_data->buffsize = offset;
 }
 
 void ws8x_reset_counters() {
