@@ -24,7 +24,7 @@ LoRaMacRegion_t loraWanRegion = ACTIVE_REGION;
 DeviceClass_t loraWanClass = LORAWAN_CLASS;
 
 /*the application data transmission duty cycle.  value in [ms].*/
-uint32_t appTxDutyCycle = 60000;
+uint32_t appTxDutyCycle = 300000;
 
 /*OTAA or ABP*/
 bool overTheAirActivation = LORAWAN_NETMODE;
@@ -66,14 +66,10 @@ void setup()
 	boardInitMcu();
 	Serial.begin(115200);
 	delay(5000);
-// #if (AT_SUPPORT)
-// 	enableAt();
-// #endif
 	deviceState = DEVICE_STATE_INIT;
 	LoRaWAN.ifskipjoin();
-	
+		
 	wakeByUart = true;
-
 }
 
 void loop()
@@ -126,4 +122,51 @@ void loop()
 	}
 	}
 
+}
+
+void downLinkDataHandle(McpsIndication_t *mcpsIndication)
+{
+    Serial.printf("Received downlink: %d bytes\n", mcpsIndication->BufferSize);
+    
+    // Print received data in hex
+    Serial.print("Hex: ");
+    for(uint8_t i = 0; i < mcpsIndication->BufferSize; i++) {
+        Serial.printf("%02X ", mcpsIndication->Buffer[i]);
+    }
+    Serial.println();
+    
+    // Print received data in ASCII
+    Serial.print("ASCII: ");
+    for(uint8_t i = 0; i < mcpsIndication->BufferSize; i++) {
+        Serial.print((char)mcpsIndication->Buffer[i]);
+    }
+    Serial.println();
+    
+    // Check for "reboot" command (6 bytes)
+    if(mcpsIndication->BufferSize == 6) {
+        char cmd[7];  // +1 for null terminator
+        memcpy(cmd, mcpsIndication->Buffer, 6);
+        cmd[6] = '\0';
+        
+        if(strcmp(cmd, "reboot") == 0) {
+            Serial.println("Rebooting...");
+            delay(1000);  // Give some time for the message to be sent
+            NVIC_SystemReset();
+            return;
+        }
+    }
+    
+    // Handle duty cycle changes
+    if(mcpsIndication->BufferSize == 1) {
+        uint8_t value = mcpsIndication->Buffer[0];
+        
+        // Check if it's an ASCII number (0x30-0x39)
+        if(value >= '0' && value <= '9') {
+            uint8_t minutes = value - '0';  // Convert ASCII to number
+            if(minutes >= 1) {  // No need to check upper bound since single digit
+                appTxDutyCycle = (uint32_t)minutes * 60000; // Convert minutes to milliseconds
+                Serial.printf("New duty cycle set to: %d minutes (%lu ms)\n", minutes, appTxDutyCycle);
+            }
+        }
+    }
 }
