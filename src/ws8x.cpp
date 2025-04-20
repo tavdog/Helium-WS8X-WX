@@ -148,7 +148,22 @@ void ws8x_populate_lora_buffer(lmh_app_data_t *m_lora_app_data, int size)
     int16_t intCapVoltageF = (int16_t)(roundedCapVoltageF * 100);  // Scale to 2 decimal places
     int16_t intTemperatureF = (int16_t)(roundedTemperatureF * 10); // Scale to 1 decimal place
     uint16_t intRain = (uint16_t)(roundedRain * 10);               // Scale to 1 decimal place
-    uint16_t deviceVoltage_mv = (uint16_t)(analogRead(BATTERY_PIN) * REAL_VBAT_MV_PER_LSB);
+
+    // Set the analog reference to 3.0V (default = 3.6V)
+    analogReference(AR_INTERNAL_3_0);
+
+    // Set the resolution to 12-bit (0..4095)
+    analogReadResolution(12); // Can be 8, 10, 12 or 14
+    // Average 10 samples for more stable battery voltage reading
+    uint32_t voltage_sum = 0;
+    for(int i = 0; i < 10; i++) {
+        voltage_sum += (uint32_t)(analogRead(BATTERY_PIN));
+        delay(1);
+    }
+    uint16_t raw = (uint16_t)(voltage_sum / 10);
+    Serial.printf("average raw is : %d\r\n", raw);
+    uint16_t deviceVoltage_mv = raw * REAL_VBAT_MV_PER_LSB;
+
     // Pack the integers into the buffer in a specific order
     int offset = 0;
     memcpy(&m_lora_app_data->buffer[offset], &intDirAvg, sizeof(int16_t));
