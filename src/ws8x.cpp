@@ -96,6 +96,10 @@ void ws8x_checkSerial()
                         temperatureF = value.toFloat();
                     }
                 }
+                else if (key == "Rain" ) {
+                    rain = value.toFloat();
+
+                }
                 // ... rest of your parsing code ...
             }
         }
