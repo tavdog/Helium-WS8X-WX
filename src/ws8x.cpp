@@ -85,7 +85,8 @@ void ws8x_checkSerial()
                 {
                     batVoltageF = value.toFloat();
                 }
-                else if (key == "CapVoltage")
+                // WS85 has CapVoltage, WS80 has Humidity. Just use the same var
+                else if (key == "CapVoltage" || key == "Humi")
                 {
                     capVoltageF = value.toFloat();
                 }
